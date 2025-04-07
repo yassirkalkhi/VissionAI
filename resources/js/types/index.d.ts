@@ -21,6 +21,13 @@ export interface NavItem {
     icon?: LucideIcon | null;
     isActive?: boolean;
 }
+export interface Conversation {
+    id: number
+    title: string
+    updated_at: string
+    user_id?: number
+  }
+  
 export interface Chat {
     id: string;
     title: string;
