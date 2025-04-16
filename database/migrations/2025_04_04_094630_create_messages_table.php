@@ -16,7 +16,10 @@ return new class extends Migration
             $table->foreignId('conversation_id')->constrained()->onDelete('cascade');
             $table->enum('role', ['user', 'assistant']);
             $table->text('content');
+            $table->text('extracted_text')->nullable();
             $table->json('attachments')->nullable();
+            $table->boolean('is_streaming')->default(false);
+            
             $table->timestamps();
             $table->softDeletes();
         });

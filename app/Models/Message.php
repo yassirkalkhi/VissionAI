@@ -15,10 +15,13 @@ class Message extends Model
         'role',
         'content',
         'attachments',
+        'is_streaming',
+        'extracted_text',
     ];
 
     protected $casts = [
         'attachments' => 'array',
+        'is_streaming' => 'boolean',
     ];
 
     /**

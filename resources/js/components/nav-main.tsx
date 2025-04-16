@@ -48,7 +48,7 @@ import {
     useEffect(() => {
       setConversations(initialConversations)
     }, [initialConversations])
-  
+    if(!conversations) return null;
     const todayConversations = conversations.filter((conv) => isToday(parseISO(conv.updated_at)))
   
     const yesterdayConversations = conversations.filter((conv) => isYesterday(parseISO(conv.updated_at)))

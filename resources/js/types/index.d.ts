@@ -52,5 +52,50 @@ export interface User {
     email_verified_at: string | null;
     created_at: string;
     updated_at: string;
-    [key: string]: unknown; // This allows for additional properties...
+    [key: string]: unknown;
 }
+
+export interface Quiz {
+    id: number;
+    title: string;
+    description: string;
+    difficulty: string;
+    settings: {
+        time_limit: number | null;
+        enable_timer: boolean;
+        shuffle_questions: boolean;
+        show_correct_answers: boolean;
+        allow_retake: boolean;
+        question_count: number;
+        is_friendly_quiz: boolean;
+    };
+    questions_count: number;
+    created_at: string;
+    attempts?: QuizAttempt[];
+}
+
+export interface QuizAttempt {
+    id: number;
+    quiz_id: number;
+    user_id: number;
+    score: number;
+    time_taken: number;
+    answers: Record<number, string>;
+    created_at: string;
+}
+
+export interface Question {
+    id: number
+    quiz_id: number
+    question_text: string
+    question_type: string
+    options: any
+    correct_answer: string
+    explanation: string | null
+    order: number
+    settings: any
+    created_at: string
+    updated_at: string
+  
+}
+

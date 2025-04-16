@@ -11,9 +11,10 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import type { Conversation } from "@/types"
-import { Link } from "@inertiajs/react"
-import { BookOpen, Folder } from "lucide-react"
+import { Link, router } from "@inertiajs/react"
+import { BookOpen, Folder, GraduationCap } from "lucide-react"
 import AppLogo from "./app-logo"
+import { Button } from "./ui/button"
 
 interface AppSidebarProps {
   conversations?: Conversation[]
@@ -21,13 +22,13 @@ interface AppSidebarProps {
 
 const footerNavItems = [
   {
-    title: "Repository",
-    href: "https://github.com/laravel/react-starter-kit",
-    icon: Folder,
+    title: "Quizes",
+    href: "/quizzes",
+    icon: GraduationCap
   },
   {
     title: "Documentation",
-    href: "https://laravel.com/docs/starter-kits",
+    href: "/docs",
     icon: BookOpen,
   },
 ]
@@ -39,17 +40,17 @@ export function AppSidebar({ conversations = [] }: AppSidebarProps) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link href="/dashboard" prefetch>
+              <Link href="/" prefetch>
                 <AppLogo />
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-
-      <SidebarContent>
+      <SidebarContent className="pt-2">
+        <Button variant={"secondary"} className="m-3 cursor-pointer" onClick={()=> router.visit('/chat')}>New Chat</Button>
         <NavMain conversations={conversations} />
-      </SidebarContent>
+      </SidebarContent> 
 
       <SidebarFooter>
         <NavFooter items={footerNavItems} className="mt-auto" />
