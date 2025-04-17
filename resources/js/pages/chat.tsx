@@ -1,5 +1,3 @@
-"use client"
-
 import type React from "react"
 import { useState, useRef, useEffect, useCallback } from "react"
 import AppSidebarLayout from "@/layouts/app/app-sidebar-layout"
@@ -14,6 +12,7 @@ import ReactMarkdown from "react-markdown"
 import axios from "axios"
 import { createWorker } from "tesseract.js"
 import { cn } from "@/lib/utils"
+import { CodeBlock } from "@/components/CodeBlock"
 
 interface Message {
   id: string | number
@@ -83,8 +82,12 @@ const animationStyles = `
   background-color: rgba(0, 0, 0, 0.05);
   padding: 1em;
   border-radius: 0.5em;
-  overflow-x: auto;
   margin: 1em 0;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  word-break: break-all;
 }
 
 .markdown-content code {
@@ -92,11 +95,16 @@ const animationStyles = `
   padding: 0.2em 0.4em;
   border-radius: 0.3em;
   font-size: 0.9em;
+  word-break: break-all;
+  word-wrap: break-word;
 }
 
 .markdown-content pre code {
   background-color: transparent;
   padding: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  word-break: break-all;
 }
 
 .markdown-content blockquote {
@@ -115,7 +123,35 @@ const animationStyles = `
 .dark .markdown-content blockquote {
   border-left-color: rgba(255, 255, 255, 0.3);
 }
+
+.code-block-container {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+.code-block-content {
+  min-width: 100%;
+  overflow-x: auto;
+}
+
+@media (max-width: 640px) {
+  .code-block-content pre {
+    font-size: 0.8em;
+  }
+}
 `
+
+const calculateSizeInKB = (text: string): number => {
+  const bytes = new TextEncoder().encode(text).length
+  return Math.round((bytes / 1024) * 10) / 10
+}
+
+const countLines = (text: string): number => {
+  return text.split("\n").length
+}
+
+const getFileExtension = () => "txt"
 
 export default function DeepSeekChat({
   currentConversation,
@@ -133,7 +169,8 @@ export default function DeepSeekChat({
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [textareaHeight, setTextareaHeight] = useState<number>(40)
   const [copiedMessageId, setCopiedMessageId] = useState<string | number | null>(null)
-  const [pastedCodeSnippets, setPastedCodeSnippets] = useState<{ code: string; language: { id: string; name: string; icon: React.ReactNode } }[]>([])
+  const [collapsedCodeBlocks, setCollapsedCodeBlocks] = useState<Set<string>>(new Set())
+  const [pastedCodeSnippets, setPastedCodeSnippets] = useState<{ code: string }[]>([])
   const [previewCodeIndex, setPreviewCodeIndex] = useState<number | null>(null)
 
   const eventSourceRef = useRef<EventSource | null>(null)
@@ -162,22 +199,26 @@ export default function DeepSeekChat({
   }, [data.message, adjustTextareaHeight])
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+    // Only scroll on initial load
+    if (messages.length > 0) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto" })
+    }
+  }, []) // Empty dependency array means this only runs once on mount
 
   useEffect(() => {
     return () => eventSourceRef.current?.close()
   }, [])
 
-  const copyToClipboard = (text: string, messageId: string | number) => {
-    navigator.clipboard.writeText(text).then(() => {
+  const copyToClipboard = async (text: string, messageId: string | number) => {
+    try {
+      await navigator.clipboard.writeText(text)
       setCopiedMessageId(messageId)
       setTimeout(() => {
-        if (copiedMessageId === messageId) {
-          setCopiedMessageId(null)
-        }
-      }, 1000)
-    })
+        setCopiedMessageId(null)
+      }, 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+    }
   }
 
   const stopGeneration = () => {
@@ -387,71 +428,9 @@ export default function DeepSeekChat({
     setExtractedText("")
   }
 
-  const detectLanguage = (code: string): { id: string; name: string; icon: React.ReactNode } => {
-    if (code.includes("<?php") || code.includes("namespace App\\") || code.match(/\$\w+\s*=\s*[^;]+;/)) {
-      return { id: "php", name: "PHP", icon: <img src='/icons/laravel.png' width={15} alt="Laravel icon" /> }
-    }
-    if (code.includes("<React") || code.includes("import React") || (code.includes("return (") && code.includes("<") && code.includes(">"))) {
-      return { id: "jsx", name: "React", icon: <span className="text-sky-500">⚛️</span> }
-    }
-    if (code.includes("interface ") || code.includes(": string") || code.includes(": number") || code.includes(": boolean") || code.includes(": React.") || code.includes("<T>")) {
-      return { id: "typescript", name: "TypeScript", icon: <img src='/icons/typescript.png' width={15} alt="TypeScript icon" /> }
-    }
-    if (code.includes("function") || code.includes("const ") || code.includes("let ") || code.includes("var ") || code.includes("=> {") || code.includes("new Promise")) {
-      return { id: "javascript", name: "JavaScript", icon: <img src='/icons/js.png' width={15} alt="JavaScript icon" /> }
-    }
-    if (code.includes("def ") || (code.includes("import ") && code.includes(":")) || code.match(/if\s+[\w_]+\s*:/) || (code.includes("class ") && code.includes(":"))) {
-      return { id: "python", name: "Python", icon: <img src='/icons/python.png' width={15} alt="Python icon" /> }
-    }
-    if (code.includes("public class") || (code.includes("private") && code.includes("void")) || code.includes("System.out.println") || code.includes("extends ")) {
-      return { id: "java", name: "Java", icon: <img src='/icons/java.png' width={15} alt="Java icon" /> }
-    }
-    if (code.includes("#include") || code.includes("int main") || code.includes("std::") || code.includes("cout <<")) {
-      return { id: "cpp", name: "C/C++", icon: <img src='/icons/c++.png' width={15} alt="C++ icon" /> }
-    }
-    if (code.match(/SELECT\s+[\w\s*,]+\s+FROM/) || code.includes("INSERT INTO") || code.includes("CREATE TABLE") || (code.includes("UPDATE ") && code.includes("SET "))) {
-      return { id: "sql", name: "SQL", icon: <img src='/icons/mysql.png' width={15} alt="SQL icon" /> }
-    }
-    if (code.includes("<!DOCTYPE html>") || (code.includes("<html>") && code.includes("</html>")) || (code.includes("<div") && code.includes("</div>") && code.includes("<head>"))) {
-      return { id: "html", name: "HTML", icon: <img src='/icons/html.png' width={15} alt="HTML icon" /> }
-    }
-    if (code.match(/\.\w+\s*\{/) || code.includes("@media ") || code.includes("@keyframes") || (code.includes("margin:") && code.includes("padding:"))) {
-      return { id: "css", name: "CSS", icon: <img src='/icons/css-3.png' width={15} alt="CSS icon" /> }
-    }
-    return { id: "code", name: "Code", icon: <Code className="h-3 w-3 text-gray-500" /> }
-  }
-
-  const isCodeSnippet = (text: string): boolean => {
-    const codePatterns = [
-      /function\s+\w+\s*\(/i,
-      /<\?php/i,
-      /namespace\s+[\w\\]+;/i,
-      /class\s+\w+/i,
-      /import\s+[\w\s{},*]+\s+from/i,
-      /public|private|protected\s+function/i,
-      /(const|let|var)\s+\w+\s*[:=]/i,
-      /def\s+\w+\s*\(/i,
-      /#include\s+[<"]\w+[>"]/i,
-      /public\s+class\s+\w+/i,
-      /SELECT\s+[\w\s*,]+\s+FROM\s+\w+/i,
-      /<\w+\s+[\w\s={}]*\/>/i,
-      /<\w+>[\s\S]*<\/\w+>/i,
-      /\.\w+\s*\{[\s\S]*\}/i,
-      /@\w+\s*\(/i,
-    ]
-
-    return (
-      (text.split("\n").length > 2 ||
-        (text.includes("{") && text.includes("}")) ||
-        (text.includes("<") && text.includes(">"))) &&
-      codePatterns.some((pattern) => pattern.test(text))
-    )
-  }
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-    if (!data.message.trim() && !imageFiles.length && pastedCodeSnippets.length === 0) return
+    if (!data.message.trim() && !imageFiles.length) return
 
     let uploadedImages: Array<{ path: string; url: string; name: string; contentType?: string }> = []
     try {
@@ -470,7 +449,7 @@ export default function DeepSeekChat({
     if (pastedCodeSnippets.length > 0) {
       messageContent +=
         "\n\n" +
-        pastedCodeSnippets.map((snippet) => `\`\`\`${snippet.language.id}\n${snippet.code}\n\`\`\``).join("\n\n")
+        pastedCodeSnippets.map((snippet) => `\`\`\`\n${snippet.code}\n\`\`\``).join("\n\n")
     }
 
     const tempUserMessage: Message = {
@@ -528,10 +507,6 @@ export default function DeepSeekChat({
               : msg
           )
         )
-
-        if (content) {
-          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-        }
 
         if (finished) {
           eventSource.close()
@@ -593,8 +568,6 @@ export default function DeepSeekChat({
       setImageFiles([])
       setImagePreviews([])
       setExtractedText("")
-      setPastedCodeSnippets([])
-      setPreviewCodeIndex(null)
       if (fileInputRef.current) fileInputRef.current.value = ""
 
       if (textareaRef.current) {
@@ -615,69 +588,79 @@ export default function DeepSeekChat({
     }
   }
 
-  const SimpleMarkdown = ({ content, isUserMessage = false }: { content: string; isUserMessage?: boolean }) => {
-    if (!content) return null
+  const toggleCodeBlock = (blockId: string) => {
+    setCollapsedCodeBlocks((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(blockId)) {
+        newSet.delete(blockId)
+      } else {
+        newSet.add(blockId)
+      }
+      return newSet
+    })
+  }
 
-    const formatUserCodeBlocks = (text: string) => {
-      const parts = text.split(/(```[\s\S]*?```)/g)
+  const formatCodeBlocks = (text: string) => {
+    const parts = text.split(/(```[\s\S]*?)(?:```|$)/g)
 
-      return parts.map((part, index) => {
-        if (part.startsWith("```") && part.endsWith("```")) {
-          const match = part.match(/```(\w*)\n([\s\S]*?)```/)
-          if (match) {
-            const [_, lang, code] = match
-            const language = lang.trim() || "code"
-            const langInfo = getLangInfo(language)
-            const codeId = `user-code-${index}-${Math.random().toString(36).substring(2, 9)}`
-
-            return (
-              <div key={index} className="my-2 rounded-md border border-border overflow-hidden bg-muted/20">
-                <div className="flex items-center justify-between bg-muted/40 px-3 py-1.5 border-b border-border">
-                  <div className="flex items-center gap-1.5">
-                    {langInfo.icon}
-                    <span className="text-sm font-medium">{langInfo.name}</span>
-                  </div>
-                  <button
-                    onClick={() => copyToClipboard(code, codeId)}
-                    className="text-xs flex items-center gap-1 hover:text-foreground transition-colors"
-                    title="Copy code"
-                  >
-                    {copiedMessageId === codeId ? (
-                      <Check className="h-3.5 w-3.5 text-green-500" />
-                    ) : (
-                      <Copy className="h-3.5 w-3.5" />
-                    )}
-                  </button>
-                </div>
-                <div className="p-4 overflow-x-auto">
-                  <pre className="text-sm font-mono whitespace-pre-wrap">{code}</pre>
-                </div>
-              </div>
-            )
-          }
+    return parts.map((part, index) => {
+      if (part.startsWith('```')) {
+        const match = part.match(/```(\w*)\n?([\s\S]*?)(?:```|$)/)
+        if (match) {
+          const [_, lang, code] = match
+          const language = lang.trim() || 'code'
+          const langInfo = getLangInfo(language)
+          return (
+            <CodeBlock
+              key={`code-${index}-${Date.now()}`}
+              code={code}
+              language={langInfo.name}
+              icon={langInfo.icon}
+            />
+          )
         }
+      }
 
-        return (
+      // Process regular text with proper spacing
+      const textContent = part.trim()
+      if (!textContent) return null
+
+      return (
+        <div key={index} className="prose dark:prose-invert max-w-none">
           <ReactMarkdown
-            key={index}
             components={{
-              code({ children }) {
-                return <code className="bg-muted/20 px-1 py-0.5 rounded">{children}</code>
-              },
+              p: ({ children }) => <p className="mb-4 last:mb-0">{children}</p>,
+              code: ({ children }) => (
+                <code className="bg-muted/20 px-1 py-0.5 rounded text-sm">{children}</code>
+              ),
+              pre: ({ children }) => <pre className="overflow-x-auto">{children}</pre>,
+              ul: ({ children }) => <ul className="list-disc pl-6 mb-2">{children}</ul>,
+              ol: ({ children }) => <ol className="list-decimal pl-6 mb-2">{children}</ol>,
+              li: ({ children }) => <li className="mb-1">{children}</li>,
+              h1: ({ children }) => <h1 className="text-2xl font-bold mb-1 mt-2">{children}</h1>,
+              h2: ({ children }) => <h2 className="text-xl font-bold mb-1 mt-2">{children}</h2>,
+              h3: ({ children }) => <h3 className="text-lg font-bold mb-1 mt-2">{children}</h3>,
+              blockquote: ({ children }) => (
+                <blockquote className="border-l-4 border-border pl-4 italic my-4">{children}</blockquote>
+              ),
             }}
           >
-            {part}
+            {textContent}
           </ReactMarkdown>
-        )
-      })
-    }
-
-    if (isUserMessage) {
-      return <div className="whitespace-pre-wrap">{formatUserCodeBlocks(content)}</div>
-    }
-
-    return <div className="">{formatUserCodeBlocks(content)}</div>
+        </div>
+      )
+    }).filter(Boolean)
   }
+
+  const SimpleMarkdown = ({ content, isUserMessage = false }: { content: string; isUserMessage?: boolean }) => {
+    if (!content) return null;
+
+    return (
+      <div className={cn("space-y-4", isUserMessage ? "whitespace-pre-wrap" : "")}>
+        {formatCodeBlocks(content)}
+      </div>
+    );
+  };
 
   useEffect(() => {
     const styleElement = document.createElement("style")
@@ -688,52 +671,25 @@ export default function DeepSeekChat({
     }
   }, [])
 
-  const calculateSizeInKB = (text: string): number => {
-    const bytes = new TextEncoder().encode(text).length
-    return Math.round((bytes / 1024) * 10) / 10
-  }
-
-  const countLines = (text: string): number => {
-    return text.split("\n").length
-  }
-
-  const getFileExtension = (language: string): string => {
-    const extensions: Record<string, string> = {
-      php: "php",
-      jsx: "jsx",
-      typescript: "ts",
-      javascript: "js",
-      python: "py",
-      java: "java",
-      cpp: "cpp",
-      go: "go",
-      html: "html",
-      css: "css",
-      sql: "sql",
-      blade: "blade.php",
-      code: "txt",
-    }
-    return extensions[language] || "txt"
-  }
-
   const getLangInfo = (lang: string) => {
     const langMap: Record<string, { name: string; icon: React.ReactNode }> = {
       php: { name: "Laravel", icon: <img src='/icons/laravel.png' width={15} alt="Laravel icon" /> },
-      jsx: { name: "React", icon: <span className="text-sky-500">JSX</span> },
+      jsx: { name: "React", icon: <span className="text-sky-500">⚛️</span> },
       typescript: { name: "TypeScript", icon: <img src='/icons/typescript.png' width={15} alt="TypeScript icon" /> },
-      ts: { name: "TypeScript", icon: <span className="text-blue-500">TS</span> },
+      ts: { name: "TypeScript", icon: <img src='/icons/typescript.png' width={15} alt="TypeScript icon" /> },
       javascript: { name: "JavaScript", icon: <img src='/icons/js.png' width={15} alt="JavaScript icon" /> },
-      js: { name: "JavaScript", icon: <span className="text-yellow-500">JS</span> },
+      js: { name: "JavaScript", icon: <img src='/icons/js.png' width={15} alt="JavaScript icon" /> },
       python: { name: "Python", icon: <img src='/icons/python.png' width={15} alt="Python icon" /> },
       py: { name: "Python", icon: <img src='/icons/python.png' width={15} alt="Python icon" /> },
       java: { name: "Java", icon: <img src='/icons/java.png' width={15} alt="Java icon" /> },
-      cpp: { name: "C++", icon: <img src='/icons/c++.png' width={15} alt="C++ icon" /> },
-      c: { name: "C", icon: <span className="text-blue-600">C</span> },
+      cpp: { name: "C++", icon: <img src='/icons/cplusplus.png' width={15} alt="C++ icon" /> },
+      c: { name: "C", icon: <img src='/icons/cplusplus.png' width={15} alt="C/C++ icon" /> },
       sql: { name: "SQL", icon: <img src='/icons/mysql.png' width={15} alt="SQL icon" /> },
       html: { name: "HTML", icon: <img src='/icons/html.png' width={15} alt="HTML icon" /> },
       css: { name: "CSS", icon: <img src='/icons/css-3.png' width={15} alt="CSS icon" /> },
+      go: { name: "Go", icon: <img src='/icons/go.png' width={15} alt="Go icon" /> },
+      // Remove unused icons and use text alternatives for missing ones
       blade: { name: "Laravel", icon: <span className="text-red-500">🔪</span> },
-      go: { name: "Go", icon: <span className="text-cyan-500">Go</span> },
       json: { name: "JSON", icon: <span className="text-gray-500">{}</span> },
       xml: { name: "XML", icon: <span className="text-orange-400">&lt;/&gt;</span> },
       bash: { name: "Bash", icon: <span className="text-green-600">$</span> },
@@ -769,6 +725,108 @@ export default function DeepSeekChat({
     return null
   }
 
+  const isCodeSnippet = (text: string): boolean => {
+    return text.split("\n").length > 1 || text.length > 80
+  }
+
+  const regenerateResponse = async (userMessage: string) => {
+    if (isLoading) return
+
+    const tempAssistantMessage: Message = {
+      id: `assistant-${Date.now()}`,
+      content: "",
+      role: "assistant",
+      isStreaming: true,
+      isThinking: true,
+    }
+
+    assistantMessageId.current = tempAssistantMessage.id
+    setMessages((prev) => [...prev, tempAssistantMessage])
+    setIsLoading(true)
+
+    try {
+      const params = new URLSearchParams({
+        message: userMessage,
+        conversation_id: data.conversation_id.toString(),
+      })
+
+      eventSourceRef.current?.close()
+      const eventSource = new EventSource(`/chat-stream?${params.toString()}`)
+      eventSourceRef.current = eventSource
+
+      eventSource.onmessage = (event) => {
+        const { content, finished } = JSON.parse(event.data)
+
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessageId.current
+              ? {
+                  ...msg,
+                  content: msg.content + content,
+                  isStreaming: !finished,
+                  isThinking: false,
+                }
+              : msg
+          )
+        )
+
+        if (finished) {
+          eventSource.close()
+          setIsLoading(false)
+          
+          axios
+            .get(`/api/conversations/${data.conversation_id}`)
+            .then((response) => {
+              const conversationData = response.data
+              setMessages((prev) => {
+                const existingMessages = [...prev]
+                const serverMessages = conversationData.messages
+                return existingMessages.map((msg) => {
+                  if (msg.role === "user" || !msg.isStreaming) {
+                    const serverMsg = serverMessages.find(
+                      (sMsg: Message) => sMsg.role === msg.role && sMsg.content === msg.content
+                    )
+                    return serverMsg || msg
+                  }
+                  return msg
+                })
+              })
+            })
+            .catch(console.error)
+        }
+      }
+
+      eventSource.onerror = (error) => {
+        console.error("Stream error:", error)
+        eventSource.close()
+        setIsLoading(false)
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessageId.current
+              ? {
+                  ...msg,
+                  content: msg.content + "\n\nSorry, there was an error processing your request.",
+                  isStreaming: false,
+                  isThinking: false,
+                }
+              : msg
+          )
+        )
+      }
+    } catch (error) {
+      console.error("Error starting stream:", error)
+      setIsLoading(false)
+      setMessages((prev) => [
+        ...prev.filter((msg) => msg.id !== assistantMessageId.current),
+        {
+          id: `error-${Date.now()}`,
+          content: "Sorry, there was an error processing your request.",
+          role: "assistant",
+        },
+      ])
+    }
+  }
+
   return (
     <AppSidebarLayout conversations={conversations} breadcrumbs={breadcrumbs}>
       <Head title="DeepSeek Chat" />
@@ -782,7 +840,7 @@ export default function DeepSeekChat({
                     <div key={i} className="flex items-start gap-2">
                       <Skeleton className="h-8 w-8 rounded-md" />
                       <div className="space-y-12 flex-1">
-                        <Skeleton className="h-30 w-180" />
+                        <Skeleton className="h-30 w-full" />
                       </div>
                     </div>
                   ))}
@@ -796,8 +854,7 @@ export default function DeepSeekChat({
                           <img src={auth.user.avatar || "/placeholder.svg"} alt="" />
                         </div>
                       ) : (
-                        <div className="h-8 w-8 rounded-md bg-primary text-primary-foreground flex items-center justify-center text-xs font-medium">
-                          AI
+                        <div className="h-8 w-8 rounded-md bg-linear-150 from-[#00bba2] to-pink-300 text-primary-foreground flex items-center justify-center text-xs font-medium">
                         </div>
                       )}
                     </div>
@@ -806,13 +863,13 @@ export default function DeepSeekChat({
                       <div className={cn("rounded-lg p-3 relative text-sm", message.isThinking ? "flex items-center" : "")}>
                         {message.isThinking ? (
                           <div className="flex items-center text-muted-foreground">
-                            <span className="thinking-pulse mr-2">is Thinking ...</span>
+                            <span className="thinking-pulse mr-2">Thinking </span>
                             <span className="thinking-pulse" style={{ animationDelay: "0.3s" }}>.</span>
                             <span className="thinking-pulse" style={{ animationDelay: "0.6s" }}>.</span>
                             <span className="thinking-pulse" style={{ animationDelay: "0.9s" }}>.</span>
                           </div>
                         ) : (
-                          <div className="whitespace-pre-wrap">
+                    <div className="whitespace-pre-wrap">
                             {message.role === "assistant" ? (
                               <SimpleMarkdown content={message.content} />
                             ) : (
@@ -834,7 +891,7 @@ export default function DeepSeekChat({
                                 <Check className="h-3 w-3 text-green-500" />
                                 <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-background border border-border rounded px-2 py-1 text-xs whitespace-nowrap">
                                   Copied!
-                                </span>
+                        </span>
                               </>
                             ) : (
                               <Copy className="h-4 w-4 hover:scale-110 transition-transform" />
@@ -855,13 +912,13 @@ export default function DeepSeekChat({
                             >
                               <RefreshCw className="h-4 w-4 hover:scale-110 transition-transform" />
                             </button>
-                          )}
-                        </div>
+                      )}
+                    </div>
                       )}
 
                       {message.role === "user" && (
                         <div className="flex flex-wrap gap-2 mt-2 overflow-x-auto pb-2 ms-4">
-                          {message.attachments?.map((attachment, i) => (
+                    {message.attachments?.map((attachment, i) => (
                             <button
                               key={`img-${i}`}
                               onClick={() => setSelectedImage(attachment.url)}
@@ -870,10 +927,10 @@ export default function DeepSeekChat({
                               <FileText className="h-3.5 w-3.5 text-primary" />
                               <span className="text-xs">Document {i + 1}</span>
                             </button>
-                          ))}
-                        </div>
+                    ))}
+                  </div>
                       )}
-                    </div>
+                </div>
                   </div>
                 ))
               )}
@@ -910,7 +967,7 @@ export default function DeepSeekChat({
                   ))}
 
                     {pastedCodeSnippets.map((snippet, index) => {
-                      const extension = getFileExtension(snippet.language.id)
+                      const extension = getFileExtension()
                       return (
                         <div
                           key={`code-${index}`}
@@ -918,13 +975,12 @@ export default function DeepSeekChat({
                         >
                           <div className="flex items-center justify-between bg-muted/50 px-2 py-1 border-b border-border">
                             <div className="flex items-center flex-1 gap-1 select-none">
-                              {snippet.language.icon}
                               <span className="text-[0.7rem] font-medium truncate">
                                 file{index + 1}.{extension}
                               </span>
-                            </div>
+                </div>
                             <button
-                              type="button"
+                          type="button"
                               onClick={() => {
                                 setPastedCodeSnippets((prev) => prev.filter((_, i) => i !== index))
                                 if (previewCodeIndex === index) {
@@ -948,7 +1004,7 @@ export default function DeepSeekChat({
                         </div>
                       )
                     })}
-                </div>
+                  </div>
                 </div>
               )}
 
@@ -980,8 +1036,7 @@ export default function DeepSeekChat({
 
                         if (isCodeSnippet(pastedText) && pastedCodeSnippets.length < 5) {
                           e.preventDefault()
-                          const language = detectLanguage(pastedText)
-                          setPastedCodeSnippets((prev) => [...prev, { code: pastedText, language }])
+                          setPastedCodeSnippets((prev) => [...prev, { code: pastedText }])
                         }
                       }}
                     />
@@ -1004,7 +1059,7 @@ export default function DeepSeekChat({
                         className="h-8 w-8"
                         disabled={
                           isExtracting.length > 0 ||
-                          (!isLoading && !data.message.trim() && !imageFiles.length && pastedCodeSnippets.length === 0)
+                          (!isLoading && !data.message.trim() && !imageFiles.length)
                         }
                         onClick={(e) => {
                           if (isLoading) {
@@ -1033,67 +1088,7 @@ export default function DeepSeekChat({
             </div>
           </div>
         </div>
-      </div>
-
-      <Dialog open={previewCodeIndex !== null} onOpenChange={(open) => !open && setPreviewCodeIndex(null)}>
-        <DialogContent className="max-w-3xl w-full p-4 overflow-hidden">
-          {previewCodeIndex !== null && pastedCodeSnippets[previewCodeIndex] && (() => {
-            const snippet = pastedCodeSnippets[previewCodeIndex]
-            const code = snippet.code
-            const language = snippet.language
-            const extension = getFileExtension(language.id)
-            const sizeKB = calculateSizeInKB(code)
-            const lineCount = countLines(code)
-            const charCount = code.length
-
-            return (
-              <div className="relative w-full">
-                <div className="flex items-center mb-3 px-1">
-                  <h3 className="text-xs font-medium flex items-center gap-2">
-                    {language.icon}
-                    <span>file{previewCodeIndex + 1}.{extension}</span>
-                  </h3>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground pl-4">
-                    <span>{sizeKB} KB</span>
-                    <span>•</span>
-                    <span>{lineCount} lines</span>
-                    <span>•</span>
-                    <span>{charCount} chars</span>
                   </div>
-                </div>
-                <div className="rounded-md border border-border overflow-hidden">
-                  <div className="bg-muted/50 px-3 py-2 border-b border-border flex items-center justify-between">
-                    <div className="flex items-center text-xs">
-                      {language.icon}
-                      <span className="text-[0.6rem] font-medium ml-2">{language.name}</span>
-                    </div>
-                    <button
-                      onClick={() => copyToClipboard(code, `code-${previewCodeIndex}`)}
-                      className="text-xs flex items-center gap-1 hover:text-foreground transition-colors"
-                      title="Copy code"
-                    >
-                      {copiedMessageId === `code-${previewCodeIndex}` ? (
-                        <Check className="h-3.5 w-3.5 text-green-400" />
-                      ) : (
-                        <Copy className="h-4 w-4 hover:opacity-50" />
-                      )}
-                    </button>
-                  </div>
-                  <div className="max-h-[calc(70vh-100px)] overflow-auto bg-background p-5">
-                    <pre className="text-xs font-mono whitespace-pre-wrap overflow-x-scroll break-words">
-                      {code.split("\n").map((line, index) => (
-                        <div key={index}>
-                          {line.length > 120 ? `${line.slice(0, 60)}...` : line}
-                        </div>
-                      ))}
-                    </pre>
-                  </div>
-                </div>
-              </div>
-            )
-          })()}
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={!!selectedImage} onOpenChange={(open) => !open && setSelectedImage(null)}>
         <DialogContent className="max-w-3xl w-full p-0 overflow-hidden">
@@ -1106,6 +1101,58 @@ export default function DeepSeekChat({
               />
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={previewCodeIndex !== null} onOpenChange={(open) => !open && setPreviewCodeIndex(null)}>
+        <DialogContent className="max-w-3xl w-full p-4 overflow-hidden">
+          {previewCodeIndex !== null && pastedCodeSnippets[previewCodeIndex] && (() => {
+            const snippet = pastedCodeSnippets[previewCodeIndex]
+            const code = snippet.code
+            const sizeKB = calculateSizeInKB(code)
+            const lineCount = countLines(code)
+            const charCount = code.length
+
+            return (
+              <div className="relative w-full">
+                <div className="flex items-center mb-3 px-1">
+                  <h3 className="text-xs font-medium flex items-center gap-2">
+                    <span>file{previewCodeIndex + 1}.txt</span>
+                  </h3>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground pl-4">
+                    <span>{sizeKB} KB</span>
+                    <span>•</span>
+                    <span>{lineCount} lines</span>
+                    <span>•</span>
+                    <span>{charCount} chars</span>
+                  </div>
+                </div>
+                <div className="rounded-md border border-border overflow-hidden">
+                  <div className="bg-muted/50 px-3 py-2 border-b border-border flex items-center justify-between">
+                    <div className="flex items-center text-xs">
+                      <span className="text-[0.6rem] font-medium ml-2">Code</span>
+                    </div>
+                    <button
+                      onClick={() => copyToClipboard(code, `code-${previewCodeIndex}`)}
+                      className="text-xs flex items-center gap-1 hover:text-foreground transition-colors"
+                      title="Copy code"
+                    >
+                      {copiedMessageId === `code-${previewCodeIndex}` ? (
+                        <Check className="h-3.5 w-3.5 text-green-400" />
+                      ) : (
+                        <Copy className="h-4 w-4 hover:opacity-50" />
+                      )}
+                    </button>
+            </div>
+                  <div className="max-h-[calc(70vh-100px)] overflow-auto bg-background p-5">
+                    <pre className="text-xs font-mono whitespace-pre-wrap overflow-x-scroll break-words">
+                      {code}
+                    </pre>
+          </div>
+        </div>
+      </div>
+            )
+          })()}
         </DialogContent>
       </Dialog>
     </AppSidebarLayout>

@@ -10,6 +10,7 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { Button } from "@/components/ui/button"
 import AppSidebarLayout from "@/layouts/app/app-sidebar-layout"
 import type { BreadcrumbItem, Conversation } from "@/types"
+import { toast } from "react-hot-toast"
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: "VisionAI", href: "/chat" }]
 
@@ -57,34 +58,53 @@ export default function Chat({ conversations = [] }: Props) {
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return
 
-    const newFiles = Array.from(e.target.files).slice(0, 3 - imageFiles.length)
-    const updatedFiles = [...imageFiles, ...newFiles]
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']
+    const files = Array.from(e.target.files)
+    
+    const validFiles = files.filter(file => {
+        if (!allowedTypes.includes(file.type)) {
+            toast.error(`Only images are allowed.`)
+            return false
+        }
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit
+            toast.error(`File "${file.name}" is too large. Maximum size is 5MB.`)
+            return false
+        }
+        return true
+    }).slice(0, 3 - imageFiles.length)
 
+    if (validFiles.length === 0) return
+
+    const updatedFiles = [...imageFiles, ...validFiles]
     setImageFiles(updatedFiles)
     setExtractedText("")
 
-    newFiles.forEach((file, index) => {
-      const reader = new FileReader()
-      reader.onload = (e: ProgressEvent<FileReader>) => {
-        const result = e.target?.result
-        if (result) {
-          setImagePreviews((prev) => [...prev, result as string])
-          const currentIndex = imageFiles.length + index
-          setIsExtracting((prev) => [...prev, currentIndex])
+    validFiles.forEach((file, index) => {
+        const reader = new FileReader()
+        reader.onload = (e: ProgressEvent<FileReader>) => {
+            const result = e.target?.result
+            if (result) {
+                setImagePreviews((prev) => [...prev, result as string])
+                const currentIndex = imageFiles.length + index
+                setIsExtracting((prev) => [...prev, currentIndex])
 
-          extractTextFromImage(file)
-            .then((text) => {
-              if (text) {
-                setExtractedText((prev) => (prev ? prev + "\n\n" : "") + text)
-              }
-              setIsExtracting((prev) => prev.filter((idx) => idx !== currentIndex))
-            })
-            .catch(() => {
-              setIsExtracting((prev) => prev.filter((idx) => idx !== currentIndex))
-            })
+                extractTextFromImage(file)
+                    .then((text) => {
+                        if (text) {
+                            setExtractedText((prev) => (prev ? prev + "\n\n" : "") + text)
+                        }
+                        setIsExtracting((prev) => prev.filter((idx) => idx !== currentIndex))
+                    })
+                    .catch(() => {
+                        setIsExtracting((prev) => prev.filter((idx) => idx !== currentIndex))
+                        toast.error(`Failed to extract text from "${file.name}"`)
+                    })
+            }
         }
-      }
-      reader.readAsDataURL(file)
+        reader.onerror = () => {
+            toast.error(`Failed to read file "${file.name}"`)
+        }
+        reader.readAsDataURL(file)
     })
   }
 
@@ -164,21 +184,21 @@ export default function Chat({ conversations = [] }: Props) {
         formData.append("extracted_text", extractedText)
       }
       uploadedImages.forEach((img) => formData.append("images[]", img.path))
-
+      
       const response = await axios.post(route("conversation.create"), formData, {
-        headers: {
-          "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "",
-          "Content-Type": "multipart/form-data",
-        },
+          headers: {
+            "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "",
+            "Content-Type": "multipart/form-data",
+          },
       })
-
+      
       const conversationId = response.data.id
-
+      
       sessionStorage.setItem("pendingMessage", message.trim() === "" ? "EMPTY_MESSAGE" : message.trim())
       if (extractedText) {
         sessionStorage.setItem("pendingExtractedText", extractedText)
       }
-
+      
       if (uploadedImages.length > 0) {
         sessionStorage.setItem("pendingImages", JSON.stringify(uploadedImages))
       }
@@ -194,160 +214,233 @@ export default function Chat({ conversations = [] }: Props) {
   return (
     <AppSidebarLayout conversations={conversations} breadcrumbs={breadcrumbs}>
       <Head title="New Chat" />
-      <div className="flex h-[calc(100vh-8rem)] flex-col">
-        <div className="flex-1 overflow-hidden flex flex-col">
-          <div className="flex-1 overflow-y-auto p-4">
-            <div className="max-w-3xl mx-auto space-y-4">
-              <div className="text-center py-8">
-                <h1 className="text-2xl font-bold mb-2">Start a New Chat</h1>
-                <p className="text-muted-foreground">Ask a question or upload an image to get started</p>
-              </div>
-            </div>
-            <div ref={messagesEndRef} />
+      <div className="h-[calc(100vh-8rem)] overflow-y-auto">
+        <div className="max-w-3xl mx-auto p-4 space-y-8">
+          {/* Welcome and Input Section */}
+          <div className="text-center mt-12 ">
+            <h1 className="text-2xl font-bold mb-2">Start a New Chat</h1>
+            <p className="text-muted-foreground">Ask a question or upload an image to get started</p>
           </div>
 
-          <div className="border-t bg-background">
-            <div className="max-w-3xl mx-auto p-4">
-              {(imagePreviews.length > 0 || pastedCodeSnippets.length > 0) && (
-                <div className="mb-3 border border-border rounded-md p-2 bg-background">
-                  <div className="flex overflow-x-auto pb-2 gap-2">
-                    {imagePreviews.map((preview, i) => (
-                      <div key={`img-${i}`} className="relative h-16 w-16 flex-shrink-0 rounded-md overflow-hidden">
-                        <img
-                          src={preview}
-                          alt={`Preview ${i}`}
-                          className="h-full w-full object-cover"
-                        />
-                        {isExtracting.includes(i) && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-background/70 dark:bg-background/70">
-                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                          </div>
-                        )}
+          <TooltipProvider>
+            <form onSubmit={handleSubmit} className="relative mt-12 mb-[30vh]">
+              <div className="relative flex-1 flex items-start rounded-lg border border-input bg-background focus-within:ring-1 focus-within:ring-ring">
+                <textarea
+                  ref={textareaRef}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Type a message..."
+                  className="w-full rounded-lg py-3 pl-4 pr-24 resize-none focus-visible:outline-none bg-transparent text-sm"
+                  style={{ height: `${textareaHeight}px` }}
+                  disabled={isExtracting.length > 0 || isCreating}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault()
+                      const form = e.currentTarget.form
+                      form?.requestSubmit()
+                    } else if (e.key === "Enter" && e.ctrlKey) {
+                      e.preventDefault()
+                      setMessage(message + "\n")
+                      setTimeout(adjustTextareaHeight, 0)
+                    }
+                  }}
+                  onPaste={(e) => {
+                    const clipboardData = e.clipboardData
+                    const pastedText = clipboardData.getData("text")
+
+                    if (isCodeSnippet(pastedText) && pastedCodeSnippets.length < 5) {
+                      e.preventDefault()
+                      setPastedCodeSnippets((prev) => [...prev, { code: pastedText }])
+                    }
+                  }}
+                />
+
+                <div className="absolute right-2 top-2 flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={imageFiles.length >= 3 || isExtracting.length > 0 || isCreating}
+                  >
+                    <PaperclipIcon className="h-4 w-4" />
+                  </Button>
+
+                  <Button
+                    type="submit"
+                    size="icon"
+                    className="h-8 w-8"
+                    disabled={
+                      isExtracting.length > 0 ||
+                      isCreating ||
+                      (!message.trim() && !imageFiles.length && pastedCodeSnippets.length === 0)
+                    }
+                  >
+                    {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
+                  </Button>
+                </div>
+
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleImageSelect}
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  disabled={imageFiles.length >= 3 || isExtracting.length > 0 || isCreating}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">Press Enter to send, Ctrl+Enter for line break</p>
+            </form>
+          </TooltipProvider>
+
+          {(imagePreviews.length > 0 || pastedCodeSnippets.length > 0) && (
+            <div className="border border-border rounded-md p-2 bg-background">
+              <div className="flex overflow-x-auto pb-2 gap-2">
+                {imagePreviews.map((preview, i) => (
+                  <div key={`img-${i}`} className="relative h-16 w-16 flex-shrink-0 rounded-md overflow-hidden">
+                    <img
+                      src={preview}
+                      alt={`Preview ${i}`}
+                      className="h-full w-full object-cover"
+                    />
+                    {isExtracting.includes(i) && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-background/70 dark:bg-background/70">
+                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeImage(i)}
+                      className="absolute top-0 right-0 bg-black/70 rounded-full p-0.5"
+                      title="Remove image"
+                    >
+                      <X className="h-3 w-3 text-white" />
+                    </button>
+                  </div>
+                ))}
+
+                {pastedCodeSnippets.map((snippet, index) => {
+                  const sizeKB = calculateSizeInKB(snippet.code)
+                  return (
+                    <div
+                      key={`code-${index}`}
+                      className="flex-shrink-0 w-48 h-16 flex flex-col bg-muted/30 rounded-md border border-border overflow-hidden hover:shadow-sm transition-shadow"
+                    >
+                      <div className="flex items-center justify-between bg-muted/50 px-2 py-1 border-b border-border">
+                        <div className="flex items-center flex-1 gap-1">
+                          <Code className="h-3 w-3 text-primary" />
+                          <span className="text-xs font-medium truncate">code-snippet-{index + 1}</span>
+                        </div>
                         <button
                           type="button"
-                          onClick={() => removeImage(i)}
-                          className="absolute top-0 right-0 bg-black/70 rounded-full p-0.5"
-                          title="Remove image"
+                          onClick={() => {
+                            setPastedCodeSnippets((prev) => prev.filter((_, i) => i !== index))
+                            if (previewCodeIndex === index) {
+                              setPreviewCodeIndex(null)
+                            }
+                          }}
+                          className="text-xs text-muted-foreground hover:text-foreground ml-1"
+                          title="Remove code snippet"
                         >
-                          <X className="h-3 w-3 text-white" />
+                          <X className="h-3 w-3" />
                         </button>
                       </div>
-                    ))}
-
-                    {pastedCodeSnippets.map((snippet, index) => {
-                      const sizeKB = calculateSizeInKB(snippet.code)
-                      return (
-                        <div
-                          key={`code-${index}`}
-                          className="flex-shrink-0 w-48 h-16 flex flex-col bg-muted/30 rounded-md border border-border overflow-hidden hover:shadow-sm transition-shadow"
-                        >
-                          <div className="flex items-center justify-between bg-muted/50 px-2 py-1 border-b border-border">
-                            <div className="flex items-center flex-1 gap-1">
-                              <Code className="h-3 w-3 text-primary" />
-                              <span className="text-xs font-medium truncate">code-snippet-{index + 1}</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPastedCodeSnippets((prev) => prev.filter((_, i) => i !== index))
-                                if (previewCodeIndex === index) {
-                                  setPreviewCodeIndex(null)
-                                }
-                              }}
-                              className="text-xs text-muted-foreground hover:text-foreground ml-1"
-                              title="Remove code snippet"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
-                          <div
-                            className="flex-1 p-1 overflow-hidden cursor-pointer"
-                            onClick={() => setPreviewCodeIndex(index)}
-                          >
-                            <pre className="text-xs line-clamp-2 text-muted-foreground">
-                              {snippet.code.substring(0, 100)}
-                            </pre>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <TooltipProvider>
-                <form onSubmit={handleSubmit} className="relative">
-                  <div className="relative flex-1 flex items-start rounded-lg border border-input bg-background focus-within:ring-1 focus-within:ring-ring">
-                    <textarea
-                      ref={textareaRef}
-                      value={message}
-                      onChange={(e) => setMessage(e.target.value)}
-                      placeholder="Type a message..."
-                      className="w-full rounded-lg py-3 pl-4 pr-24 resize-none focus-visible:outline-none bg-transparent text-sm"
-                      style={{ height: `${textareaHeight}px` }}
-                      disabled={isExtracting.length > 0 || isCreating}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault()
-                          const form = e.currentTarget.form
-                          form?.requestSubmit()
-                        } else if (e.key === "Enter" && e.ctrlKey) {
-                          e.preventDefault()
-                          setMessage(message + "\n")
-                          setTimeout(adjustTextareaHeight, 0)
-                        }
-                      }}
-                      onPaste={(e) => {
-                        const clipboardData = e.clipboardData
-                        const pastedText = clipboardData.getData("text")
-
-                        if (isCodeSnippet(pastedText) && pastedCodeSnippets.length < 5) {
-                          e.preventDefault()
-                          setPastedCodeSnippets((prev) => [...prev, { code: pastedText }])
-                        }
-                      }}
-                    />
-
-                    <div className="absolute right-2 top-2 flex items-center gap-2">
-                      <Button
-                        type="button"
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={imageFiles.length >= 3 || isExtracting.length > 0 || isCreating}
+                      <div
+                        className="flex-1 p-1 overflow-hidden cursor-pointer"
+                        onClick={() => setPreviewCodeIndex(index)}
                       >
-                        <PaperclipIcon className="h-4 w-4" />
-                      </Button>
-
-                      <Button
-                        type="submit"
-                        size="icon"
-                        className="h-8 w-8"
-                        disabled={
-                          isExtracting.length > 0 ||
-                          isCreating ||
-                          (!message.trim() && !imageFiles.length && pastedCodeSnippets.length === 0)
-                        }
-                      >
-                        {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
-                      </Button>
+                        <pre className="text-xs line-clamp-2 text-muted-foreground">
+                          {snippet.code.substring(0, 100)}
+                        </pre>
+                      </div>
                     </div>
-
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleImageSelect}
-                      accept="image/*"
-                      multiple
-                      className="hidden"
-                      disabled={imageFiles.length >= 3 || isExtracting.length > 0 || isCreating}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">Press Enter to send, Ctrl+Enter for line break</p>
-                </form>
-              </TooltipProvider>
+                  )
+                })}
+              </div>
             </div>
+          )}
+
+          {/* Content Sections */}
+          <div className="prose dark:prose-invert max-w-none space-y-8">
+            <section>
+              <h2 className="text-lg font-semibold mb-4">Getting Started</h2>
+              <p className="text-muted-foreground">
+                Welcome to VisionAI! Here are some tips to help you get started:
+              </p>
+              <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
+                <li>Type your question in the input area above</li>
+                <li>Upload images to extract text or analyze content</li>
+                <li>Paste code snippets for analysis or debugging</li>
+                <li>Use Ctrl+Enter for line breaks in your messages</li>
+                <li>Press Enter to send your message</li>
+              </ul>
+            </section>
+
+            <section>
+              <h2 className="text-lg font-semibold mb-4">Latest Updates</h2>
+              <div className="space-y-4">
+                <div className="border rounded-lg p-4 bg-card">
+                  <h3 className="font-medium mb-2">Enhanced Image Analysis</h3>
+                  <p className="text-sm text-muted-foreground">
+                    We've improved our image analysis capabilities. You can now upload images in JPEG, PNG, GIF, WebP, and SVG formats with a maximum size of 5MB.
+                  </p>
+                </div>
+                <div className="border rounded-lg p-4 bg-card">
+                  <h3 className="font-medium mb-2">Code Snippet Support</h3>
+                  <p className="text-sm text-muted-foreground">
+                    New feature: Paste code snippets directly into the chat. The system will automatically detect and format your code for better readability.
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h2 className="text-lg font-semibold mb-4">Tips & Tricks</h2>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="border rounded-lg p-4 bg-card">
+                  <h3 className="font-medium mb-2">Image Upload Tips</h3>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    <li>• Clear, well-lit images work best</li>
+                    <li>• Text should be clearly visible</li>
+                    <li>• Maximum 3 images per message</li>
+                    <li>• Supported formats: JPEG, PNG, GIF, WebP, SVG</li>
+                  </ul>
+                </div>
+                <div className="border rounded-lg p-4 bg-card">
+                  <h3 className="font-medium mb-2">Code Snippet Tips</h3>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    <li>• Paste code directly into the chat</li>
+                    <li>• System auto-detects code format</li>
+                    <li>• Preview code before sending</li>
+                    <li>• Remove snippets if needed</li>
+                  </ul>
+                </div>
+              </div>
+            </section>
+
+            <section>
+              <h2 className="text-lg font-semibold mb-4">Keyboard Shortcuts</h2>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="border rounded-lg p-4 bg-card">
+                  <h3 className="font-medium mb-2">Message Controls</h3>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    <li>• Enter: Send message</li>
+                    <li>• Ctrl + Enter: New line</li>
+                    <li>• Shift + Enter: New line</li>
+                  </ul>
+                </div>
+                <div className="border rounded-lg p-4 bg-card">
+                  <h3 className="font-medium mb-2">File Controls</h3>
+                  <ul className="text-sm text-muted-foreground space-y-1">
+                    <li>• Click paperclip to upload</li>
+                    <li>• Drag & drop images</li>
+                    <li>• Click X to remove files</li>
+                  </ul>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
       </div>

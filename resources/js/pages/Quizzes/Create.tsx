@@ -85,13 +85,14 @@ export default function CreateQuiz({ conversations }: Props) {
 
   const handleConfirmFile = () => {
     if (pendingText && currentFile) {
-      setExtractedText(prev => prev + pendingText + '\n\n')
-      setUploadedFiles(prev => [...prev, currentFile])
+      const formattedText = `\n\n--- Document ${uploadedFiles.length + 1}: ${currentFile.name} ---\n\n${pendingText}\n\n`;
+      setExtractedText(prev => prev + formattedText);
+      setUploadedFiles(prev => [...prev, currentFile]);
     }
-    setShowPreviewDialog(false)
-    setPendingText('')
-    setCurrentFile(null)
-  }
+    setShowPreviewDialog(false);
+    setPendingText('');
+    setCurrentFile(null);
+  };
 
   const handleSkipFile = () => {
     setShowPreviewDialog(false)
@@ -104,6 +105,12 @@ export default function CreateQuiz({ conversations }: Props) {
     setIsProcessing(true)
     setExtractedText('')
     
+    if (uploadedFiles.length + acceptedFiles.length > 5) {
+      toast.error('Maximum 5 files allowed. Please remove some files before uploading more.')
+      setIsProcessing(false)
+      return
+    }
+
     const unsupportedFiles = acceptedFiles.filter(file => {
       const isImage = file.type.startsWith('image/')
       const isPdf = file.type === 'application/pdf'
@@ -177,19 +184,19 @@ export default function CreateQuiz({ conversations }: Props) {
     }
     
     setIsProcessing(false)
-  }, [showPreviewDialog])
+  }, [showPreviewDialog, uploadedFiles.length])
 
   const { getRootProps, getInputProps, isDragActive, fileRejections } = useDropzone({
     onDrop,
     accept: {
-      'image/*': ['.png', '.jpg', '.jpeg', '.gif'],
+      'image/*': ['.png', '.jpg', '.jpeg'],
       'application/pdf': ['.pdf'],
       'application/msword': ['.doc'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
     },
     maxFiles: 5,
     maxSize: 10485760,
-    disabled: isProcessing || showPreviewDialog,
+    disabled: isProcessing || showPreviewDialog || uploadedFiles.length >= 5,
     onDropRejected: (rejections) => {
       const errors = rejections.map(rejection => {
         if (rejection.errors[0].code === 'file-too-large') {
@@ -227,25 +234,25 @@ export default function CreateQuiz({ conversations }: Props) {
       return
     }
 
-    const loadingToast = toast.loading('Creating quiz...')
-
     try {
       const formData = new FormData()
-      
-      uploadedFiles.forEach((file) => {
-        formData.append('files[]', file)
-      })
 
-      formData.append('extracted_text', extractedText)
+      const formattedExtractedText = extractedText
+        .split('--- Document')
+        .filter(part => part.trim())
+        .map(part => {
+          const [header, ...content] = part.split('\n')
+          return `--- Document${header}\n${content.join('\n').trim()}`
+        })
+        .join('\n\n')
+
+      formData.append('extracted_text', formattedExtractedText)
       formData.append('question_count', questionCount.toString())
       formData.append('difficulty', difficulty)
       formData.append('enable_timer', enableTimer ? '1' : '0')
       
       const timeLimit = enableTimer ? calculateTotalTime() : 0
       formData.append('time_limit', timeLimit.toString())
-      formData.append('shuffle_questions', '0')
-      formData.append('show_correct_answers', '1')
-      formData.append('allow_retake', '1')
       
       const response = await axios.post('/quizzes', formData, {
         headers: {
@@ -258,8 +265,6 @@ export default function CreateQuiz({ conversations }: Props) {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total!)
         }
       })
-
-      toast.dismiss(loadingToast)
 
       if (response.data.success) {
         toast.success('Quiz created successfully!')
@@ -274,8 +279,6 @@ export default function CreateQuiz({ conversations }: Props) {
         }
       }
     } catch (error) {
-      toast.dismiss(loadingToast)
-      
       if (axios.isAxiosError(error)) {
         const errorMessage = error.response?.data?.message 
           || error.message 
@@ -284,11 +287,7 @@ export default function CreateQuiz({ conversations }: Props) {
         if (error.response?.status === 422) {
           const validationErrors = error.response.data.errors
           if (validationErrors) {
-            Object.values(validationErrors).forEach((error: any) => {
-              toast.error(error[0])
-            })
-          } else {
-            toast.error(errorMessage)
+            toast.error('Error creating quiz. Please try again.')
           }
         } else if (error.response?.status === 413) {
           toast.error('The uploaded files are too large. Please reduce the file size and try again.')
@@ -300,7 +299,7 @@ export default function CreateQuiz({ conversations }: Props) {
         } else if (error.code === 'ECONNABORTED') {
           toast.error('The request timed out. Please try again.')
         } else {
-          toast.error(`Error: ${errorMessage}`)
+          toast.error('An unexpected error occurred. Please try again.')
         }
       } else {
         toast.error('An unexpected error occurred. Please try again.')
@@ -420,12 +419,12 @@ export default function CreateQuiz({ conversations }: Props) {
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
                   isDragActive 
                     ? 'border-primary bg-primary/5' 
-                    : isProcessing || showPreviewDialog
+                    : isProcessing || showPreviewDialog || uploadedFiles.length >= 5
                     ? 'border-muted-foreground/25 bg-muted cursor-not-allowed opacity-60'
                     : 'border-muted-foreground/25 cursor-pointer'
                 }`}
               >
-                <input {...getInputProps()} />
+                <input {...getInputProps()} disabled={uploadedFiles.length >= 5} />
                 {isProcessing ? (
                   <>
                     <Loader2 className="mx-auto h-12 w-12 text-muted-foreground animate-spin" />
@@ -438,6 +437,13 @@ export default function CreateQuiz({ conversations }: Props) {
                     <Upload className="mx-auto h-12 w-12 text-muted-foreground opacity-50" />
                     <p className="mt-2 text-sm text-muted-foreground">
                       Please review the current file before uploading more
+                    </p>
+                  </>
+                ) : uploadedFiles.length >= 5 ? (
+                  <>
+                    <Upload className="mx-auto h-12 w-12 text-muted-foreground opacity-50" />
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Maximum number of files (5) reached. Remove files to upload more.
                     </p>
                   </>
                 ) : (

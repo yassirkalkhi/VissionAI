@@ -64,11 +64,24 @@ class ConversationController extends Controller
             'extracted_text' => 'nullable|string',
         ]);
 
+        $title = '';
+        if (!empty($request->message)) {
+            // Remove code blocks and trim
+            $cleanMessage = preg_replace('/```[\s\S]*?```/', '', $request->message);
+            $cleanMessage = trim($cleanMessage);
+            
+            //  first 50 characters
+            $firstLine = strtok($cleanMessage, "\n") ?: $cleanMessage;
+            $title = strlen($firstLine) > 50 ? substr($firstLine, 0, 47) . '...' : $firstLine;
+        }
+
+        if (empty($title)) {
+            $title = 'Chat ' . now()->format('M j, Y g:i A');
+        }
+
         $conversation = Conversation::create([
             'user_id' => Auth::id(),
-            'title' => strlen($request->message) > 30 
-                ? substr($request->message, 0, 30) . '...' 
-                : 'New Conversation',
+            'title' => $title,
         ]);
 
         // Process image attachments
@@ -94,7 +107,7 @@ class ConversationController extends Controller
     }
  
     /**
-     * Store a newly created resource in storage.
+     * Store resource in storage.
      */
     public function store(Request $request)
     {
@@ -110,7 +123,7 @@ class ConversationController extends Controller
     }
 
     /**
-     * Show the form for editing the specified resource.
+     * Show the form for editing the  resource.
      */
     public function edit(string $id)
     {
@@ -160,7 +173,6 @@ class ConversationController extends Controller
             abort(403, 'Unauthorized action.');
         }
         
-        // Soft delete the conversation (this will automatically set the deleted_at timestamp)
         $conversation->delete();
         
         return response()->json([

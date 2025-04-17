@@ -55,23 +55,25 @@ export interface User {
     [key: string]: unknown;
 }
 
+export type Language = 'en' | 'ar' | 'fr' | 'es' | 'de' | 'zh' | 'ja' | 'ru';
+
 export interface Quiz {
     id: number;
     title: string;
     description: string;
-    difficulty: string;
+    user_id: number;
+    difficulty: 'easy' | 'medium' | 'hard';
     settings: {
         time_limit: number | null;
         enable_timer: boolean;
-        shuffle_questions: boolean;
-        show_correct_answers: boolean;
-        allow_retake: boolean;
         question_count: number;
-        is_friendly_quiz: boolean;
+        layout: 'ltr' | 'rtl';
+        language: Language;
     };
     questions_count: number;
-    created_at: string;
     attempts?: QuizAttempt[];
+    created_at: string;
+    updated_at: string;
 }
 
 export interface QuizAttempt {

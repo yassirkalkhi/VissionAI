@@ -2,6 +2,8 @@ import { Head } from '@inertiajs/react';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatDistanceToNow } from 'date-fns';
+import { XCircleIcon } from 'lucide-react';
+import { CheckCircleIcon } from 'lucide-react';
 
 interface QuizAttempt {
     id: number;
@@ -51,6 +53,29 @@ export default function Submissions({ quiz, attempts, conversations }: Props) {
         });
         return correctCount;
     };
+    const handleScoreRender = (score: number) => {
+        if(score > 90){
+            return <span className="flex items-center gap-2 text-green-600">
+                <CheckCircleIcon className="w-5 h-5" />{score}%
+            </span>
+        }
+        if(score > 70){
+            return <span className="flex items-center gap-2 text-green-400">
+                <CheckCircleIcon className="w-5 h-5" />{score}%
+            </span>
+        }
+        if(score > 50){
+            return <span className="flex items-center gap-2 text-yellow-500">
+                <XCircleIcon className="w-5 h-5" />{score}% 
+            </span> 
+        }
+        if(score < 50){
+            return <span className="flex items-center gap-2 text-red-500">
+                <XCircleIcon className="w-5 h-5" />{score}%
+            </span>
+        }
+    }
+
 
     const breadcrumbs = [
         { title: "VisionAI", href: "/chat" },
@@ -83,7 +108,7 @@ export default function Submissions({ quiz, attempts, conversations }: Props) {
                                     <Card key={attempt.id}>
                                         <CardHeader>
                                             <CardTitle className="flex items-center justify-between">
-                                                <span>Score: {attempt.score}%</span>
+                                             {   handleScoreRender(attempt.score)}
                                                 <span className="text-sm text-muted-foreground">
                                                     {formatDistanceToNow(new Date(attempt.created_at), { addSuffix: true })}
                                                 </span>

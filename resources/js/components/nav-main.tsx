@@ -26,7 +26,7 @@ import {
   } from "@/components/ui/dialog"
   import { Input } from "@/components/ui/input"
   import { useState, useEffect } from "react"
-  import axios from "axios"
+import { toast } from "react-hot-toast"
   
   interface NavMainProps {
     conversations?: Conversation[]
@@ -103,10 +103,10 @@ import {
           setSelectedConversation(null)
           setEditTitle("")
         } else {
-          console.error('Failed to rename conversation')
+            toast.error('Failed to rename conversation')
         }
       } catch (error) {
-        console.error('Error renaming conversation:', error)
+        toast.error('Error renaming conversation')
       }
     }
 
@@ -129,10 +129,10 @@ import {
           setDeleteModalOpen(false)
           setSelectedConversation(null)
         } else {
-          console.error('Failed to delete conversation')
+          toast.error('Failed to delete conversation')
         }
       } catch (error) {
-        console.error('Error deleting conversation:', error)
+        toast.error('Error deleting conversation')
       }
     }
 
@@ -148,7 +148,7 @@ import {
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
       } catch (error) {
-        console.error('Error copying to clipboard:', error)
+        toast.error('Error copying to clipboard')
       }
     }
 
@@ -213,7 +213,7 @@ import {
       <>
         {todayConversations.length > 0 && (
           <SidebarGroup className="px-2 py-0 pt-4">
-            <SidebarGroupLabel>Today</SidebarGroupLabel>
+            <SidebarGroupLabel>Recent Conversations</SidebarGroupLabel>
             <SidebarMenu>
               {todayConversations.map(renderConversationItem)}
             </SidebarMenu>

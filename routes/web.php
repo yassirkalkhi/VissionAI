@@ -18,10 +18,7 @@ Route::middleware([
     'auth',
     ValidateSessionWithWorkOS::class,
 ])->group(function () {
-    Route::get('dashboard', function () {
-        return Inertia::render('dashboard');
-    })->name('dashboard');
-    
+
     // Chat routes
     Route::get('/chat/{conversationId?}', [ChatController::class, 'index'])->name('chat.index');
     Route::get('/chat-stream', [ChatController::class, 'stream']);

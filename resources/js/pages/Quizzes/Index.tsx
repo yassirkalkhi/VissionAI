@@ -1,5 +1,3 @@
-"use client"
-
 import { useState, useCallback, memo } from "react"
 import { Head, Link } from "@inertiajs/react"
 import { router } from "@inertiajs/react"
@@ -94,14 +92,12 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
   const [searchQuery, setSearchQuery] = useState("")
   const [difficultyFilter, setDifficultyFilter] = useState("all")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
-  const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [quizToDelete, setQuizToDelete] = useState<Quiz | null>(null)
   const [editTitle, setEditTitle] = useState("")
   const [editDescription, setEditDescription] = useState("")
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [quizToEdit, setQuizToEdit] = useState<Quiz | null>(null)
-  const [expandedQuizzes, setExpandedQuizzes] = useState<Record<number, boolean>>({})
 
   const questionsByQuiz = questions.reduce(
     (acc, question) => {
@@ -120,12 +116,10 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
     difficulty: quiz.difficulty || "medium",
     settings: {
       time_limit: quiz.settings?.time_limit || null,
-      shuffle_questions: quiz.settings?.shuffle_questions || false,
-      show_correct_answers: quiz.settings?.show_correct_answers || true,
-      allow_retake: quiz.settings?.allow_retake || true,
       question_count: quiz.settings?.question_count || 0,
-      is_friendly_quiz: quiz.settings?.is_friendly_quiz || false,
       enable_timer: quiz.settings?.enable_timer || false,
+      layout: quiz.settings?.layout || 'ltr',
+      language: quiz.settings?.language || 'en'
     },
     attempts: quiz.attempts || []
   }))
@@ -366,7 +360,6 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
                 <div className="col-span-5">Title</div>
                 <div className="col-span-2 text-center">Questions</div>
                 <div className="col-span-2 text-center">Time Limit</div>
-                <div className="col-span-1 text-center">Difficulty</div>
                 <div className="col-span-2 text-right">Actions</div>
               </div>
               {filteredQuizzes.map((quiz) => (
@@ -380,11 +373,6 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
                   </div>
                   <div className="col-span-2 text-center">{quiz.questions_count}</div>
                   <div className="col-span-2 text-center">{formatTimeLimit(quiz.settings?.time_limit)}</div>
-                  <div className="col-span-1 text-center">
-                    <Badge variant={getDifficultyBadgeVariant(quiz.difficulty)} className="whitespace-nowrap">
-                      {quiz.difficulty ? quiz.difficulty.charAt(0).toUpperCase() + quiz.difficulty.slice(1) : "N/A"}
-                    </Badge>
-                  </div>
                   <div className="col-span-2 flex justify-end gap-2">
                     <div className="flex gap-2">
                       <Button

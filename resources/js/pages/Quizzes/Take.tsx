@@ -1,14 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
 import { Head, useForm, router } from '@inertiajs/react';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
-import { Quiz, Question } from '@/types';
+import { Quiz, Question, type Language } from '@/types/index';
+import { translations } from '@/translations';
 import { toast } from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Clock, ClockIcon, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 import { route } from 'ziggy-js';
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface QuizSettings {
     enable_timer: boolean;
@@ -39,8 +41,9 @@ export default function Take({ quiz, conversations }: Props) {
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const timerRef = useRef<NodeJS.Timeout | null>(null);
+    const timerRef = useRef<number | null>(null);
     const startTimeRef = useRef<number>(Date.now());
+    const endTimeRef = useRef<number | null>(null);
     const [timeTaken, setTimeTaken] = useState<number>(0);
 
     const form = useForm<FormData>({
@@ -68,28 +71,32 @@ export default function Take({ quiz, conversations }: Props) {
     useEffect(() => {
         if (quiz.settings?.enable_timer && quiz.settings?.time_limit) {
             setTimeLeft(quiz.settings.time_limit);
-        }
-    }, [quiz]);
-
-    useEffect(() => {
-        if (quiz.settings?.enable_timer && timeLeft !== null && timeLeft > 0) {
-            timerRef.current = setInterval(() => {
-                setTimeLeft(prev => {
-                    if (prev === null || prev <= 1) {
-                        handleSubmit();
-                        return 0;
-                    }
-                    return prev - 1;
-                });
-            }, 1000);
-
+            startTimeRef.current = Date.now();
+            endTimeRef.current = startTimeRef.current + (quiz.settings.time_limit * 1000);
+            
+            const updateTimer = () => {
+                const now = Date.now();
+                const remaining = Math.ceil((endTimeRef.current! - now) / 1000);
+                
+                if (remaining <= 0) {
+                    setTimeLeft(0);
+                    handleTimeEnd();
+                    return;
+                }
+                
+                setTimeLeft(remaining);
+                timerRef.current = requestAnimationFrame(updateTimer);
+            };
+            
+            timerRef.current = requestAnimationFrame(updateTimer);
+            
             return () => {
                 if (timerRef.current) {
-                    clearInterval(timerRef.current);
+                    cancelAnimationFrame(timerRef.current);
                 }
             };
         }
-    }, [quiz.settings?.enable_timer, timeLeft]);
+    }, [quiz.settings?.enable_timer, quiz.settings?.time_limit]);
 
     const formatTime = (seconds: number) => {
         const minutes = Math.floor(seconds / 60);
@@ -130,34 +137,38 @@ export default function Take({ quiz, conversations }: Props) {
         return Math.round((correctAnswers / quiz.questions.length) * 100);
     };
 
+    const handleTimeEnd = () => {
+        if (timerRef.current) {
+            cancelAnimationFrame(timerRef.current);
+        }
+        toast.error('Time is up!'); 
+        setTimeout(() => {
+            router.visit(route('quizzes.index'));
+        }, 2000);
+    };
+
     const handleSubmit = async () => {
+        if (timeLeft === 0) {
+            return;
+        }
+
         try {
             setIsSubmitting(true);
-            setError(null);
 
-            const unansweredQuestions = quiz.questions.filter(question => !selectedAnswers[question.id]);
-            if (unansweredQuestions.length > 0) {
-                const errorMsg = 'Please answer all questions before submitting';
-                setError(errorMsg);
-                toast.error(errorMsg);
-                return;
-            }
-
-            const score = calculateScore();
-            
             const submitData = {
                 answers: selectedAnswers,
                 time_taken: quiz.settings?.enable_timer ? quiz.settings.time_limit - (timeLeft || 0) : timeTaken,
-                score
+                score: calculateScore()
             };
 
             await axios.post(`/quizzes/${quiz.id}/submit`, submitData);
-            toast.success('Quiz submitted successfully!');
-            router.visit(route('quizzes.index'));
+            toast.success('Quiz submitted successfully');
+            setTimeout(() => {
+                router.visit(route('quizzes.index'));
+            }, 2000);
         } catch (error) {
-            const errorMsg = 'Failed to submit quiz. Please try again.';
-            setError(errorMsg);
-            toast.error(errorMsg);
+            console.error('Failed to submit quiz:', error);
+            toast.error('Failed to submit quiz');
         } finally {
             setIsSubmitting(false);
         }
@@ -173,20 +184,21 @@ export default function Take({ quiz, conversations }: Props) {
         { title: "Take Quiz", href: `/quizzes/take/${quiz.id}` },
     ];
 
+    const t = translations[quiz.settings?.language || 'en'];
+
     return (
         <AppSidebarLayout breadcrumbs={breadcrumbs} conversations={conversations}>
             <Head title={`Take Quiz: ${quiz.title}`} />
-
             <div className="container mx-auto p-6">
                 <div className="max-w-3xl mx-auto space-y-6">
-                    <div>
+                    <div className={`${quiz.settings?.layout === 'rtl' ? 'text-right' : 'text-left'}`}>
                         <h1 className="text-2xl font-bold">{quiz.title}</h1>
                         <p className="text-muted-foreground">{quiz.description || 'No description available'}</p>
                     </div>
 
                     {quiz.settings?.enable_timer && timeLeft !== null && (
-                        <div className="flex items-center gap-2 text-sm">
-                            <span>Time remaining: {formatTime(timeLeft)}</span>
+                        <div className={`flex items-center gap-2 text-sm ${quiz.settings?.layout === 'rtl' ? 'justify-end' : 'justify-start'}`}>
+                            <span>{`${t.timeRemaining}: ${formatTime(timeLeft)}`}</span>
                         </div>
                     )}
 
@@ -194,73 +206,70 @@ export default function Take({ quiz, conversations }: Props) {
 
                     <Card>
                         <CardHeader>
-                            <CardTitle>Question {currentQuestionIndex + 1} of {quiz.questions.length}</CardTitle>
+                            <CardTitle className={quiz.settings?.layout === 'rtl' ? 'text-right' : 'text-left'}>
+                                Question {currentQuestionIndex + 1} of {quiz.questions.length}
+                            </CardTitle>
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-6">
-                                <p className="text-gray-700">{currentQuestion.question_text}</p>
+                                <p className={`text-gray-700 dark:text-gray-300 ${quiz.settings?.layout === 'rtl' ? 'text-right' : 'text-left'}`}>
+                                    {currentQuestion.question_text}
+                                </p>
 
                                 <div className="space-y-3">
                                     {currentQuestion.options.map((option: string, index: number) => (
                                         <div
                                             key={index}
                                             onClick={() => handleQuestionClick(currentQuestion.id, option)}
-                                            className={`p-4 rounded-lg cursor-pointer transition-all ${
-                                                selectedAnswers[currentQuestion.id] === option
-                                                    ? 'bg-blue-100 border-2 border-blue-500'
-                                                    : 'bg-white border border-gray-200 hover:bg-gray-50'
-                                            }`}
+                                            className={`p-4 rounded-lg cursor-pointer transition-all bg-accent/30 ${quiz.settings?.layout === 'rtl' ? 'text-right' : 'text-left'}`}
                                         >
-                                            <div className="flex items-center">
+                                            <div className={`flex items-center ${quiz.settings?.layout === 'rtl' ? 'flex-row-reverse' : 'flex-row'}`}>
                                                 <input
                                                     type="radio"
                                                     name={`question-${currentQuestion.id}`}
                                                     checked={selectedAnswers[currentQuestion.id] === option}
                                                     onChange={() => handleAnswerSelect(currentQuestion.id, option)}
-                                                    className="mr-3"
+                                                    className={quiz.settings?.layout === 'rtl' ? 'ml-3' : 'mr-3'}
                                                 />
-                                                <span className="text-gray-700">{option}</span>
+                                                <span className="text-gray-200">{option}</span>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
 
-                                <div className="flex justify-between mt-6">
+                                <div className={`flex ${quiz.settings?.layout === 'rtl' ? 'flex-row-reverse' : 'flex-row'} justify-between mt-6`}>
                                     <Button
                                         variant="outline"
                                         onClick={handlePrevious}
                                         disabled={currentQuestionIndex === 0 || isSubmitting}
                                     >
-                                        Previous
+                                        {t.previous}
                                     </Button>
                                     {currentQuestionIndex < quiz.questions.length - 1 ? (
                                         <Button
                                             onClick={handleNext}
-                                            disabled={!isCurrentQuestionAnswered || isSubmitting}
+                                            disabled={!isCurrentQuestionAnswered || isSubmitting || timeLeft === 0}
+
                                         >
-                                            Next
+                                            {t.next}
                                         </Button>
                                     ) : (
                                         <Button
                                             onClick={handleSubmit}
-                                            disabled={!isCurrentQuestionAnswered || isSubmitting}
+                                            disabled={!isCurrentQuestionAnswered || isSubmitting || timeLeft === 0}
                                         >
                                             {isSubmitting ? (
                                                 <>
-                                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                    Submitting...
+                                                    <Loader2 className={`h-4 w-4 animate-spin ${quiz.settings?.layout === 'rtl' ? 'ml-2' : 'mr-2'}`} />
+                                                    {t.submit}
                                                 </>
                                             ) : (
-                                                'Submit Quiz'
+                                                t.submit
                                             )}
                                         </Button>
                                     )}
                                 </div>
-                                {error && (
-                                    <div className="mt-4 p-4 border border-destructive/50 rounded-md bg-destructive/10">
-                                        <p className="text-sm text-destructive">{error}</p>
-                                    </div>
-                                )}
+                              
                             </div>
                         </CardContent>
                     </Card>

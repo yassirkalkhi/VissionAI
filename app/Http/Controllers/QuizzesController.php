@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\DB;
 
 class QuizzesController extends Controller
 {
+    // functions|tools
     private $functions = [
         [
             'type' => 'function',
@@ -78,9 +79,8 @@ class QuizzesController extends Controller
                 'settings' => [
                     'time_limit' => 0,
                     'enable_timer' => false,
-                    'shuffle_questions' => true,
-                    'show_correct_answers' => true,
-                    'allow_retake' => true,
+                    'language' => $quizContent['language'],
+                    'layout' => $quizContent['layout'],
                     'question_count' => count($quizContent['questions'])
                 ]
             ]);
@@ -110,7 +110,7 @@ class QuizzesController extends Controller
             Log::error('Error saving quiz:', ['error' => $e->getMessage()]);
             return [
                 'status' => 'error',
-                'message' => 'Failed to save quiz: ' . $e->getMessage()
+                'message' => 'Failed to save quiz '
             ];
         }
     }
@@ -136,9 +136,9 @@ class QuizzesController extends Controller
                     'settings' => [
                         'time_limit' => $quiz->settings['time_limit'] ?? null,
                         'enable_timer' => $quiz->settings['enable_timer'] ?? false,
-                        'shuffle_questions' => $quiz->settings['shuffle_questions'] ?? false,
-                        'show_correct_answers' => $quiz->settings['show_correct_answers'] ?? true,
-                        'allow_retake' => $quiz->settings['allow_retake'] ?? true,
+                        'question_count' => $quiz->settings['question_count'] ?? 0,
+                        'layout' => $quiz->settings['layout'] ?? 'ltr',
+                        'language' => $quiz->settings['language'] ?? 'en'
                     ],
                     'questions_count' => $quiz->questions_count,
                     'attempts' => $quiz->attempts->map(function ($attempt) {
@@ -188,23 +188,16 @@ class QuizzesController extends Controller
             Log::info('Starting quiz creation', ['request' => $request->all()]);
 
             $request->validate([
-                'files' => 'required|array',
-                'files.*' => 'file|mimes:pdf,png,jpg,jpeg,gif,docx|max:10240',
-                'extracted_text' => 'required|string|max:5000',
+                'extracted_text' => 'required|string|max:50000',
                 'question_count' => 'required|integer|min:5|max:15',
                 'difficulty' => 'required|in:easy,medium,hard',
                 'enable_timer' => 'required|in:0,1',
-                'time_limit' => 'required|integer|min:0',
-                'shuffle_questions' => 'required|in:0,1',
-                'show_correct_answers' => 'required|in:0,1',
-                'allow_retake' => 'required|in:0,1'
+                'time_limit' => 'required|integer|min:0'
             ]);
 
-            $extractedText = Str::limit(
-                preg_replace('/\s+/', ' ', trim($request->extracted_text)),
-                3000
-            );
-
+            // Process the formatted text
+            $extractedText = $request->extracted_text;
+            
             // Create initial quiz record
             $quiz = Quiz::create([
                 'title' => 'New Quiz',
@@ -215,14 +208,15 @@ class QuizzesController extends Controller
                     'time_limit' => (int)$request->time_limit,
                     'enable_timer' => (bool)$request->enable_timer,
                     'question_count' => $request->question_count,
-                    'shuffle_questions' => (bool)$request->shuffle_questions,
-                    'show_correct_answers' => (bool)$request->show_correct_answers,
-                    'allow_retake' => (bool)$request->allow_retake
+                    'layout' => 'ltr', // Default layout
+                    'language' => 'en' // Default language
                 ]
             ]);
 
-            // Prepare system message with more specific instructions
+            // System prompt
             $systemMessage = "You are an expert quiz generator. Create a quiz with the following specifications:
+                - Ensure that the question and answer are logical and correct
+                - all questions Must have one logic valid answer
                 - Difficulty: {$request->difficulty}
                 - Number of questions: {$request->question_count}
                 - Each question must have exactly 4 options
@@ -230,19 +224,24 @@ class QuizzesController extends Controller
                 - Questions should test understanding of the text
                 - Do not include any other text or instructions in the response
                 - Do not repeat the same question in the quiz or generate to similar questions
-                - Format the response using the save_quiz function
+                - IMPORTANT: The text is extracted from multiple documents. Each document is clearly marked with '--- Document X: filename ---'
+                - IMPORTANT: Detect the language of the provided text and generate the quiz in the same language
+                - For RTL languages (like Arabic), set layout to 'rtl', otherwise set it to 'ltr'
+                - Set the language code based on the detected language (en, ar, fr, es, de, zh, ja, ru)
                 - Return the response in this exact format:
                 {
                     'quiz': {
-                        'title': 'Quiz Title',
-                        'description': 'Quiz Description',
+                        'title': 'Quiz Title in detected language',
+                        'description': 'Quiz Description in detected language',
                         'difficulty': '{$request->difficulty}',
+                        'layout': 'rtl' or 'ltr',
+                        'language': 'language_code',
                         'questions': [
                             {
-                                'question_text': 'Question text',
-                                'options': ['Option 1', 'Option 2', 'Option 3', 'Option 4'],
-                                'correct_answer': 'Correct option',
-                                'explanation': 'Brief explanation'
+                                'question_text': 'Question text in detected language',
+                                'options': ['Option 1 in detected language', 'Option 2 in detected language', 'Option 3 in detected language', 'Option 4 in detected language'],
+                                'correct_answer': 'Correct option in detected language',
+                                'explanation': 'Brief explanation in detected language'
                             }
                         ]
                     }
@@ -317,7 +316,11 @@ class QuizzesController extends Controller
                     DB::transaction(function () use ($quiz, $quizContent) {
                         $quiz->update([
                             'title' => $quizContent['title'] ?? 'New Quiz',
-                            'description' => $quizContent['description'] ?? 'Generated from uploaded content'
+                            'description' => $quizContent['description'] ?? 'Generated from uploaded content',
+                            'settings' => array_merge($quiz->settings, [
+                                'layout' => $quizContent['layout'] ?? 'ltr',
+                                'language' => $quizContent['language'] ?? 'en'
+                            ])
                         ]);
 
                         $questions = [];
@@ -413,13 +416,11 @@ class QuizzesController extends Controller
 
         
         $quiz->questions = $quiz->questions->map(function ($question) {
-            // If options is a string but not empty, try to parse it
             if (is_string($question->options) && !empty($question->options)) {
                 try {
                     $decodedOptions = json_decode($question->options, true);
                     $question->options = is_array($decodedOptions) ? $decodedOptions : [];
                     
-                    // Log warning if we couldn't parse the options
                     if (empty($question->options)) {
                         Log::warning('Failed to parse question options', [
                             'question_id' => $question->id,
@@ -434,7 +435,6 @@ class QuizzesController extends Controller
                     $question->options = [];
                 }
             }
-            // If options is already an array, keep it as is
             else if (!is_array($question->options)) {
                 $question->options = [];
             }
@@ -442,7 +442,6 @@ class QuizzesController extends Controller
             return $question;
         });
 
-        // Add debug logging after processing
         Log::info('Processed quiz data:', [
             'quiz_id' => $quiz->id,
             'processed_questions' => $quiz->questions->map(function ($q) {
@@ -454,10 +453,7 @@ class QuizzesController extends Controller
             })
         ]);
 
-        // Shuffle questions if enabled
-        if ($quiz->settings['shuffle_questions'] ?? false) {
-            $quiz->questions = $quiz->questions->shuffle();
-        }
+       
 
         return Inertia::render('Quizzes/Take', [
             'quiz' => $quiz,
@@ -473,8 +469,6 @@ class QuizzesController extends Controller
             DB::beginTransaction();
             
             $quiz = Quiz::with('questions')->findOrFail($id);
-            
-            // Log the incoming request data
             Log::info('Quiz submission request data:', $request->all());
             
             // Validate the request
