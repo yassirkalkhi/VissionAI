@@ -16,6 +16,7 @@ import {
   MessageSquare,
 } from "lucide-react"
 import { motion } from "framer-motion"
+import { useLanguage } from "@/contexts/LanguageContext"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -44,6 +45,8 @@ const staggerContainer = {
 }
 
 export default function Dashboard() {
+  const { t } = useLanguage()
+  
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Subtle background pattern */}
@@ -62,23 +65,22 @@ export default function Dashboard() {
           >
             <Badge className="mb-4" variant="outline">
               <Sparkles className="mr-1 h-3 w-3" />
-              Powered by Advanced AI Models
+              {t.imageAnalysis}
             </Badge>
             <h1 className="mb-4 text-4xl font-extrabold tracking-tight md:text-5xl lg:text-6xl">
-              Welcome to <span className="text-primary">VisionAI</span>
+              {t.welcome}
             </h1>
             <p className="mb-8 max-w-3xl text-xl text-muted-foreground">
-              Unlock the power of AI-driven image recognition and document text extraction. Transform visual data into
-              actionable insights with our state-of-the-art platform.
+              {t.welcomeMessage}
             </p>
             <div className="flex flex-wrap items-center justify-center gap-4">
               <Button size="lg" onClick={() => router.visit('/chat')}>
-                Get Started
+                {t.gettingStarted}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
               <Button size="lg" variant="outline" onClick={() => router.visit('/docs')}>
                 <BookOpen className="mr-2 h-4 w-4" />
-                Documentation
+                {t.keyboardShortcuts}
               </Button>
             </div>
           </motion.div>
@@ -93,9 +95,9 @@ export default function Dashboard() {
           variants={fadeIn}
         >
           <div className="mb-12 text-center">
-            <h2 className="mb-2 text-3xl font-bold tracking-tight md:text-4xl">Key Features</h2>
+            <h2 className="mb-2 text-3xl font-bold tracking-tight md:text-4xl">{t.tips}</h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              Our platform offers comprehensive AI-powered solutions for all your image and document processing needs
+              {t.codeSupport}
             </p>
           </div>
           <motion.div
@@ -109,17 +111,17 @@ export default function Dashboard() {
               <Card className="h-full transition-all duration-200 hover:shadow-md">
                 <CardHeader>
                   <Image className="mb-2 h-6 w-6 text-primary" />
-                  <CardTitle>Image Recognition</CardTitle>
+                  <CardTitle>{t.imageAnalysis}</CardTitle>
                   <CardDescription>
-                    Identify objects, scenes, and content within images with high accuracy
+                    {t.extractingText}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ul className="ml-6 list-disc text-sm text-muted-foreground space-y-2">
-                    <li>Multi-object detection and classification</li>
-                    <li>Scene understanding and context analysis</li>
-                    <li>Facial recognition and attribute detection</li>
-                    <li>Custom model training for specific use cases</li>
+                    <li>{t.imageAnalysis}</li>
+                    <li>{t.textExtracted}</li>
+                    <li>{t.extractingText}</li>
+                    <li>{t.maxImages}</li>
                   </ul>
                 </CardContent>
               </Card>
@@ -129,15 +131,15 @@ export default function Dashboard() {
               <Card className="h-full transition-all duration-200 hover:shadow-md">
                 <CardHeader>
                   <FileText className="mb-2 h-6 w-6 text-primary" />
-                  <CardTitle>Document Text Extraction</CardTitle>
-                  <CardDescription>Extract and process text from documents, images, and scanned files</CardDescription>
+                  <CardTitle>{t.extractingText}</CardTitle>
+                  <CardDescription>{t.textExtracted}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ul className="ml-6 list-disc text-sm text-muted-foreground space-y-2">
-                    <li>OCR (Optical Character Recognition) capabilities</li>
-                    <li>Support for multiple languages and scripts</li>
-                    <li>Table and form data extraction</li>
-                    <li>Handwriting recognition and processing</li>
+                    <li>{t.extractingText}</li>
+                    <li>{t.supportedFormats}</li>
+                    <li>{t.textExtracted}</li>
+                    <li>{t.extractingText}</li>
                   </ul>
                 </CardContent>
               </Card>
@@ -147,15 +149,15 @@ export default function Dashboard() {
               <Card className="h-full transition-all duration-200 hover:shadow-md">
                 <CardHeader>
                   <Lightbulb className="mb-2 h-6 w-6 text-primary" />
-                  <CardTitle>AI-Powered Descriptions</CardTitle>
-                  <CardDescription>Generate detailed, contextual descriptions of visual content</CardDescription>
+                  <CardTitle>{t.codeSnippet}</CardTitle>
+                  <CardDescription>{t.codeSupport}</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ul className="ml-6 list-disc text-sm text-muted-foreground space-y-2">
-                    <li>Natural language image descriptions</li>
-                    <li>Content summarization and key point extraction</li>
-                    <li>Sentiment and emotion analysis</li>
-                    <li>Customizable description styles and formats</li>
+                    <li>{t.copyCode}</li>
+                    <li>{t.codeSupport}</li>
+                    <li>{t.uploadImage}</li>
+                    <li>{t.maxImages}</li>
                   </ul>
                 </CardContent>
               </Card>
@@ -172,9 +174,9 @@ export default function Dashboard() {
           variants={fadeIn}
         >
           <div className="mb-12 text-center">
-            <h2 className="mb-2 text-3xl font-bold tracking-tight md:text-4xl">How It Works</h2>
+            <h2 className="mb-2 text-3xl font-bold tracking-tight md:text-4xl">{t.gettingStarted}</h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              Our platform simplifies the process of extracting insights from visual data
+              {t.welcomeMessage}
             </p>
           </div>
           <motion.div
@@ -192,9 +194,9 @@ export default function Dashboard() {
               <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground">
                 <Upload className="h-8 w-8" />
               </div>
-              <h3 className="mb-2 text-xl font-bold">1. Upload</h3>
+              <h3 className="mb-2 text-xl font-bold">1. {t.uploadImage}</h3>
               <p className="text-sm text-muted-foreground">
-                Upload images or documents through our intuitive interface or API
+                {t.imageUploadTips}
               </p>
             </motion.div>
 

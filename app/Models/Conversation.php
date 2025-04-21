@@ -15,6 +15,11 @@ class Conversation extends Model
     protected $fillable = [
         'user_id',
         'title',
+        'is_public',
+    ];
+
+    protected $casts = [
+        'is_public' => 'boolean',
     ];
 
     /**

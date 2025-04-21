@@ -162,13 +162,111 @@ class ChatController extends Controller
     {
         return array_map(function ($path) {
             $mimeType = Storage::mimeType($path) ?? 'image/jpeg';
+            $appUrl = config('app.url');
+            
+            // Check if port 8000 is already in the URL
+            if (strpos($appUrl, ':8000') === false) {
+                $appUrl = rtrim($appUrl, '/') . ':8000';
+            }
+            
             return [
-                'url' => Storage::url($path),
+                'url' => $appUrl . '/storage/' . $path,
                 'contentType' => $mimeType,
             ];
         }, $imagePaths);
     }
     
-   
+    /**
+     * Save a partial response when generation is stopped by the user
+     */
+    public function savePartialResponse(Request $request)
+    {
+        try {
+            // Validate the request
+            $validated = $request->validate([
+                'conversation_id' => 'required|integer',
+                'content' => 'required|string',
+                'role' => 'required|string|in:assistant',
+                'is_partial' => 'required|boolean'
+            ]);
+
+            // Find the conversation and verify ownership
+            $conversation = Conversation::findOrFail($validated['conversation_id']);
+            
+            if ($conversation->user_id !== Auth::id()) {
+                return response()->json(['error' => 'Unauthorized'], 403);
+            }
+
+            // Find the most recent assistant message that is streaming
+            $message = Message::where('conversation_id', $conversation->id)
+                ->where('role', 'assistant')
+                ->where('is_streaming', true)
+                ->latest()
+                ->first();
+
+            // If a streaming message is found, update it
+            if ($message) {
+                $message->update([
+                    'content' => $validated['content'] . "\n\n[Generation stopped by user]",
+                    'is_streaming' => false
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Partial response saved successfully'
+                ]);
+            } else {
+                // Create a new message if no streaming message is found
+                Message::create([
+                    'conversation_id' => $conversation->id,
+                    'role' => 'assistant',
+                    'content' => $validated['content'] . "\n\n[Generation stopped by user]",
+                    'is_streaming' => false
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'New message created with partial response'
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('Error saving partial response: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to save partial response: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Display public conversation
+     */
+    public function viewPublicConversation($conversationId)
+    {
+        $conversation = Conversation::findOrFail($conversationId);
+        
+        // Check if conversation is public
+        if (!$conversation->is_public) {
+            abort(403, 'This conversation is not public');
+        }
+        
+        $messages = $conversation->messages()
+            ->orderBy('created_at')
+            ->get()
+            ->map(function ($message) {
+                return [
+                    'id' => $message->id,
+                    'content' => $message->content,
+                    'role' => $message->role,
+                    'attachments' => $message->attachments ? json_decode($message->attachments) : [],
+                    'created_at' => $message->created_at,
+                ];
+            });
+        
+        return Inertia::render('PublicConversation', [
+            'conversation' => $conversation,
+            'messages' => $messages,
+        ]);
+    }
 }
 

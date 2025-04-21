@@ -10,6 +10,9 @@ export interface Translations {
     correct: string;
     incorrect: string;
     explanation: string;
+    question : string,
+    of : string
+
 }
 
 export const translations: Record<Language, Translations> = {
@@ -22,7 +25,9 @@ export const translations: Record<Language, Translations> = {
         score: 'Score',
         correct: 'Correct',
         incorrect: 'Incorrect',
-        explanation: 'Explanation'
+        explanation: 'Explanation',
+        question: 'Question',
+        of: 'of'
     },
     ar: {
         timeRemaining: 'الوقت المتبقي',
@@ -33,7 +38,9 @@ export const translations: Record<Language, Translations> = {
         score: 'الدرجة',
         correct: 'صحيح',
         incorrect: 'خطأ',
-        explanation: 'شرح'
+        explanation: 'شرح',
+        question: 'السؤال',
+        of: 'من'
     },
     fr: {
         timeRemaining: 'Temps restant',
@@ -44,7 +51,9 @@ export const translations: Record<Language, Translations> = {
         score: 'Score',
         correct: 'Correct',
         incorrect: 'Incorrect',
-        explanation: 'Explication'
+        explanation: 'Explication',
+        question: 'Question',
+        of: 'sur'
     },
     es: {
         timeRemaining: 'Tiempo restante',
@@ -55,7 +64,9 @@ export const translations: Record<Language, Translations> = {
         score: 'Puntuación',
         correct: 'Correcto',
         incorrect: 'Incorrecto',
-        explanation: 'Explicación'
+        explanation: 'Explicación',
+        question: 'Pregunta',
+        of: 'de'
     },
     de: {
         timeRemaining: 'Verbleibende Zeit',
@@ -66,7 +77,9 @@ export const translations: Record<Language, Translations> = {
         score: 'Punktzahl',
         correct: 'Richtig',
         incorrect: 'Falsch',
-        explanation: 'Erklärung'
+        explanation: 'Erklärung',
+        question: 'Frage',
+        of: 'von'
     },
     zh: {
         timeRemaining: '剩余时间',
@@ -77,7 +90,9 @@ export const translations: Record<Language, Translations> = {
         score: '分数',
         correct: '正确',
         incorrect: '错误',
-        explanation: '解释'
+        explanation: '解释',
+        question: '问题',
+        of: '共'
     },
     ja: {
         timeRemaining: '残り時間',
@@ -88,7 +103,9 @@ export const translations: Record<Language, Translations> = {
         score: 'スコア',
         correct: '正解',
         incorrect: '不正解',
-        explanation: '説明'
+        explanation: '説明',
+        question: '質問',
+        of: 'のうち'
     },
     ru: {
         timeRemaining: 'Оставшееся время',
@@ -99,6 +116,8 @@ export const translations: Record<Language, Translations> = {
         score: 'Счет',
         correct: 'Правильно',
         incorrect: 'Неправильно',
-        explanation: 'Объяснение'
+        explanation: 'Объяснение',
+        question: 'Вопрос',
+        of: 'из'
     }
-}; 
+};

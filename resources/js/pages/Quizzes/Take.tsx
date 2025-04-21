@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Head, useForm, router } from '@inertiajs/react';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Quiz, Question, type Language } from '@/types/index';
-import { translations } from '@/translations';
+import { translations } from '@/translations/take';
 import { toast } from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +11,7 @@ import { Loader2, Clock, ClockIcon, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 import { route } from 'ziggy-js';
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface QuizSettings {
     enable_timer: boolean;
@@ -36,6 +37,7 @@ interface FormData {
 }
 
 export default function Take({ quiz, conversations }: Props) {
+    const { t: globalT } = useLanguage();
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [selectedAnswers, setSelectedAnswers] = useState<Record<number, string>>({});
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
@@ -137,11 +139,13 @@ export default function Take({ quiz, conversations }: Props) {
         return Math.round((correctAnswers / quiz.questions.length) * 100);
     };
 
+    const t = translations[quiz.settings?.language || 'en'];
+
     const handleTimeEnd = () => {
         if (timerRef.current) {
             cancelAnimationFrame(timerRef.current);
         }
-        toast.error('Time is up!'); 
+        toast.error(t.timeRemaining); 
         setTimeout(() => {
             router.visit(route('quizzes.index'));
         }, 2000);
@@ -162,13 +166,13 @@ export default function Take({ quiz, conversations }: Props) {
             };
 
             await axios.post(`/quizzes/${quiz.id}/submit`, submitData);
-            toast.success('Quiz submitted successfully');
+            toast.success(t.score);
             setTimeout(() => {
                 router.visit(route('quizzes.index'));
             }, 2000);
         } catch (error) {
             console.error('Failed to submit quiz:', error);
-            toast.error('Failed to submit quiz');
+            toast.error(t.incorrect);
         } finally {
             setIsSubmitting(false);
         }
@@ -180,20 +184,18 @@ export default function Take({ quiz, conversations }: Props) {
 
     const breadcrumbs = [
         { title: "VisionAI", href: "/chat" },
-        { title: "Quizzes", href: "/quizzes" },
-        { title: "Take Quiz", href: `/quizzes/take/${quiz.id}` },
+        { title: globalT.quizzes, href: "/quizzes" },
+        { title: globalT.startQuiz, href: `/quizzes/take/${quiz.id}` },
     ];
 
-    const t = translations[quiz.settings?.language || 'en'];
-
     return (
-        <AppSidebarLayout breadcrumbs={breadcrumbs} conversations={conversations}>
-            <Head title={`Take Quiz: ${quiz.title}`} />
+        <AppSidebarLayout breadcrumbs={breadcrumbs}>
+            <Head title={`${t.question}: ${quiz.title}`} />
             <div className="container mx-auto p-6">
                 <div className="max-w-3xl mx-auto space-y-6">
                     <div className={`${quiz.settings?.layout === 'rtl' ? 'text-right' : 'text-left'}`}>
                         <h1 className="text-2xl font-bold">{quiz.title}</h1>
-                        <p className="text-muted-foreground">{quiz.description || 'No description available'}</p>
+                        <p className="text-muted-foreground">{quiz.description || t.question}</p>
                     </div>
 
                     {quiz.settings?.enable_timer && timeLeft !== null && (
@@ -207,7 +209,7 @@ export default function Take({ quiz, conversations }: Props) {
                     <Card>
                         <CardHeader>
                             <CardTitle className={quiz.settings?.layout === 'rtl' ? 'text-right' : 'text-left'}>
-                                Question {currentQuestionIndex + 1} of {quiz.questions.length}
+                                {t.question} {currentQuestionIndex + 1} {t.of} {quiz.questions.length}
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
@@ -231,7 +233,7 @@ export default function Take({ quiz, conversations }: Props) {
                                                     onChange={() => handleAnswerSelect(currentQuestion.id, option)}
                                                     className={quiz.settings?.layout === 'rtl' ? 'ml-3' : 'mr-3'}
                                                 />
-                                                <span className="text-gray-200">{option}</span>
+                                                <span className="dark:text-gray-200">{option}</span>
                                             </div>
                                         </div>
                                     ))}

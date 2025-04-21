@@ -457,9 +457,6 @@ class QuizzesController extends Controller
 
         return Inertia::render('Quizzes/Take', [
             'quiz' => $quiz,
-            'conversations' => Conversation::where('user_id', auth()->id())
-                ->orderBy('updated_at', 'desc')
-                ->get(['id', 'title', 'updated_at'])
         ]);
     }
 

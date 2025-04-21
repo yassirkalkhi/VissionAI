@@ -14,25 +14,26 @@ import { Link, router } from "@inertiajs/react"
 import { BookOpen, GraduationCap } from "lucide-react"
 import AppLogo from "./app-logo"
 import { Button } from "./ui/button"
+import useConversations from "@/hooks/use-conversations"
+import { useLanguage } from "@/contexts/LanguageContext"
 
-interface AppSidebarProps {
-  conversations?: Conversation[]
-}
+export function AppSidebar() {
+  const { conversations, loading } = useConversations();
+  const { t } = useLanguage();
 
-const NavItems = [
-  {
-    title: "Quizes",
-    href: "/quizzes",
-    icon: GraduationCap
-  },
-  {
-    title: "Documentation",
-    href: "/docs",
-    icon: BookOpen,
-  },
-]
+  const NavItems = [
+    {
+      title: t.quizzes,
+      href: "/quizzes",
+      icon: GraduationCap
+    },
+    {
+      title: t.documentation,
+      href: "/docs",
+      icon: BookOpen,
+    },
+  ]
 
-export function AppSidebar({ conversations = [] }: AppSidebarProps) {
   return (
     <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader>
@@ -46,9 +47,8 @@ export function AppSidebar({ conversations = [] }: AppSidebarProps) {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-    
       <SidebarContent className="pt-2">
-        <Button variant={"secondary"} className="m-3 cursor-pointer" onClick={()=> router.visit('/chat')}>New Chat</Button>
+        <Button variant={"secondary"} className="m-3 cursor-pointer" onClick={()=> router.visit('/chat')}>{t.newChat}</Button>
         <SidebarMenu className="px-2">
           {NavItems.map((item) => (
             <SidebarMenuItem key={item.title}>

@@ -23,6 +23,8 @@ import { extractTextFromPDF } from '@/lib/pdf-extractor'
 import { extractTextFromDocx } from '@/lib/docx-extractor'
 import { GlobalWorkerOptions } from 'pdfjs-dist/build/pdf'
 import toast from 'react-hot-toast'
+import { useLanguage } from '@/contexts/LanguageContext'
+import { cn } from "@/lib/utils"
 
 interface Props {
   conversations: Conversation[]
@@ -40,6 +42,8 @@ GlobalWorkerOptions.workerSrc = new URL(
 ).toString()
 
 export default function CreateQuiz({ conversations }: Props) {
+  const { t, language } = useLanguage()
+  const isRTL = language === 'ar'
   const [isLoading, setIsLoading] = useState(false)
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -106,7 +110,7 @@ export default function CreateQuiz({ conversations }: Props) {
     setExtractedText('')
     
     if (uploadedFiles.length + acceptedFiles.length > 5) {
-      toast.error('Maximum 5 files allowed. Please remove some files before uploading more.')
+      toast.error(t.maxFilesAllowed)
       setIsProcessing(false)
       return
     }
@@ -121,7 +125,7 @@ export default function CreateQuiz({ conversations }: Props) {
 
     if (unsupportedFiles.length > 0) {
       const unsupportedFileNames = unsupportedFiles.map(file => file.name).join(', ')
-      toast.error(`Unsupported file format(s): ${unsupportedFileNames}. Please only upload PDF, DOC, DOCX, or image files.`)
+      toast.error(`${t.unsupportedFormat}: ${unsupportedFileNames}. ${t.uploadSupportedFormats}`)
       setIsProcessing(false)
       return
     }
@@ -157,20 +161,20 @@ export default function CreateQuiz({ conversations }: Props) {
             }, 100)
           })
         } else {
-          processingErrors.push(`No text could be extracted from ${file.name}. Please make sure the file contains readable text.`)
+          processingErrors.push(`${t.noTextExtracted} ${file.name}. ${t.checkReadableText}`)
         }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Unknown error'
         let userFriendlyMessage = ''
         
         if (errorMessage.includes('Failed to extract text from PDF')) {
-          userFriendlyMessage += 'Could not read text from this PDF. Please make sure it contains selectable text and is not a scanned document.'
+          userFriendlyMessage += t.pdfExtractionFailed
         } else if (errorMessage.includes('Legacy .doc files')) {
-          userFriendlyMessage += 'Please save your .doc file as .docx and try again.'
+          userFriendlyMessage += t.docLegacyNotSupported
         } else if (errorMessage.includes('Failed to extract text from document')) {
-          userFriendlyMessage += 'Could not read text from this document. Please make sure it is not corrupted or password protected.'
+          userFriendlyMessage += t.documentExtractionFailed
         } else if (errorMessage.includes('Failed to process image')) {
-          userFriendlyMessage += 'Could not extract text from this image. Please make sure it contains clear, readable text.'
+          userFriendlyMessage += t.imageExtractionFailed
         } else {
           userFriendlyMessage += errorMessage
         }
@@ -184,7 +188,7 @@ export default function CreateQuiz({ conversations }: Props) {
     }
     
     setIsProcessing(false)
-  }, [showPreviewDialog, uploadedFiles.length])
+  }, [showPreviewDialog, uploadedFiles.length, t])
 
   const { getRootProps, getInputProps, isDragActive, fileRejections } = useDropzone({
     onDrop,
@@ -200,10 +204,10 @@ export default function CreateQuiz({ conversations }: Props) {
     onDropRejected: (rejections) => {
       const errors = rejections.map(rejection => {
         if (rejection.errors[0].code === 'file-too-large') {
-          return `${rejection.file.name} is too large. Maximum size is 10MB.`
+          return `${rejection.file.name} ${t.fileTooLarge}`
         }
         if (rejection.errors[0].code === 'file-invalid-type') {
-          return `${rejection.file.name} is not a supported file type.`
+          return `${rejection.file.name} ${t.fileInvalidType}`
         }
         return `${rejection.file.name}: ${rejection.errors[0].message}`
       })
@@ -221,14 +225,14 @@ export default function CreateQuiz({ conversations }: Props) {
     setIsSubmitting(true)
 
     if (!extractedText.trim()) {
-      toast.error('No content has been extracted from the files. Please upload and process at least one file.')
+      toast.error(t.noContentExtracted)
       setIsLoading(false)
       setIsSubmitting(false)
       return
     }
 
     if (uploadedFiles.length === 0) {
-      toast.error('Please upload at least one file.')
+      toast.error(t.pleaseUploadFile)
       setIsLoading(false)
       setIsSubmitting(false)
       return
@@ -267,10 +271,10 @@ export default function CreateQuiz({ conversations }: Props) {
       })
 
       if (response.data.success) {
-        toast.success('Quiz created successfully!')
+        toast.success(t.quizCreatedSuccess)
         router.visit(route('quizzes.index'))
       } else {
-        const errorMessage = response.data.message || 'Failed to create quiz'
+        const errorMessage = response.data.message || t.failedToCreate
         toast.error(errorMessage)
         if (response.data.errors) {
           Object.values(response.data.errors).forEach((error: any) => {
@@ -282,27 +286,27 @@ export default function CreateQuiz({ conversations }: Props) {
       if (axios.isAxiosError(error)) {
         const errorMessage = error.response?.data?.message 
           || error.message 
-          || 'Failed to create quiz'
+          || t.failedToCreate
         
         if (error.response?.status === 422) {
           const validationErrors = error.response.data.errors
           if (validationErrors) {
-            toast.error('Error creating quiz. Please try again.')
+            toast.error(t.errorCreatingQuiz)
           }
         } else if (error.response?.status === 413) {
-          toast.error('The uploaded files are too large. Please reduce the file size and try again.')
+          toast.error(t.filesTooLarge)
         } else if (error.response?.status === 401) {
-          toast.error('You are not authorized to create quizzes. Please log in and try again.')
+          toast.error(t.notAuthorized)
         } else if (error.response?.status === 500) {
-          const serverMessage = error.response?.data?.message || 'Internal server error occurred'
-          toast.error(`Server Error: ${serverMessage}`)
+          const serverMessage = error.response?.data?.message || t.serverError
+          toast.error(`${t.serverError}: ${serverMessage}`)
         } else if (error.code === 'ECONNABORTED') {
-          toast.error('The request timed out. Please try again.')
+          toast.error(t.requestTimeout)
         } else {
-          toast.error('An unexpected error occurred. Please try again.')
+          toast.error(t.unexpectedError)
         }
       } else {
-        toast.error('An unexpected error occurred. Please try again.')
+        toast.error(t.unexpectedError)
       }
     } finally {
       setIsLoading(false)
@@ -312,8 +316,8 @@ export default function CreateQuiz({ conversations }: Props) {
 
   const breadcrumbs = [
     { title: "VisionAI", href: "/chat" },
-    { title: "Quizzes", href: "/quizzes" },
-    { title: "Create Quiz", href: "/quizzes/create" },
+    { title: t.quizzes, href: "/quizzes" },
+    { title: t.createQuiz, href: "/quizzes/create" },
   ]
 
   const calculateTotalTime = () => {
@@ -323,35 +327,35 @@ export default function CreateQuiz({ conversations }: Props) {
   }
 
   const formatTime = (seconds: number) => {
-    if (seconds === 0) return 'No time limit'
+    if (seconds === 0) return t.noLimit
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
     if (hours > 0) {
       return `${hours}h ${minutes}m`
     }
-    return `${minutes} minutes`
+    return `${minutes} ${t.minutes}`
   }
 
   return (
-    <AppSidebarLayout breadcrumbs={breadcrumbs} conversations={conversations}>
-      <Head title="Create Quiz" />
+    <AppSidebarLayout breadcrumbs={breadcrumbs} >
+      <Head title={t.createQuiz} />
 
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto p-6" style={isRTL ? { direction: 'rtl' } : {}}>
         <div className="max-w-3xl mx-auto space-y-6">
-          <div>
-            <h1 className="text-2xl font-bold">Create New Quiz</h1>
-            <p className="text-muted-foreground">Upload documents or images to generate an AI-powered quiz</p>
+          <div className={isRTL ? 'text-right' : ''}>
+            <h1 className="text-2xl font-bold">{t.createNewQuiz}</h1>
+            <p className="text-muted-foreground">{t.uploadDocumentsDescription}</p>
           </div>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Quiz Settings</CardTitle>
-              <CardDescription>Configure your quiz preferences</CardDescription>
+            <CardHeader className={isRTL ? 'text-right' : ''}>
+              <CardTitle>{t.quizSettings}</CardTitle>
+              <CardDescription>{t.configurePreferences}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label>Number of Questions</Label>
-                <div className="flex items-center gap-4">
+                <Label className={isRTL ? 'text-right block' : ''}>{t.questionCount}</Label>
+                <div className={`flex items-center gap-4 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <Slider
                     value={[questionCount]}
                     onValueChange={([value]) => setQuestionCount(value)}
@@ -360,47 +364,59 @@ export default function CreateQuiz({ conversations }: Props) {
                     step={1}
                     className="flex-1"
                   />
-                  <span className="text-sm font-medium w-12">{questionCount}</span>
+                  <span className="text-sm font-medium w-12 text-center">{questionCount}</span>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label>Difficulty Level</Label>
+                <Label className={isRTL ? 'text-right block' : ''}>{t.difficulty}</Label>
                 <Select value={difficulty} onValueChange={setDifficulty}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select difficulty" />
+                  <SelectTrigger className={isRTL ? 'text-right' : ''}>
+                    <SelectValue placeholder={t.selectDifficulty} />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="easy">Easy</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="hard">Hard</SelectItem>
+                  <SelectContent className={isRTL ? 'text-right' : ''}>
+                    <SelectItem value="easy">{t.easy}</SelectItem>
+                    <SelectItem value="medium">{t.medium}</SelectItem>
+                    <SelectItem value="hard">{t.hard}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label className="text-right">Timer</Label>
-                  <div className="col-span-3">
-                    <div className="flex items-center justify-between">
-                      <span>Enable Timer</span>
-                      <Switch
-                        checked={enableTimer}
-                        onCheckedChange={setEnableTimer}
-                      />
-                    </div>
-                  </div>
+                <div className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
+                {isRTL ? (
+                  <>
+                  <Switch
+                      checked={enableTimer}
+                      onCheckedChange={setEnableTimer}
+                    />
+                    <Label className={isRTL ? 'text-right' : ''}>{t.timer}</Label>
+                    
+                  </>
+                ) : (
+                  <>
+                    <Label className={isRTL ? 'text-right' : ''}>{t.timer}</Label>
+                    <Switch
+                      checked={enableTimer}
+                      onCheckedChange={setEnableTimer}
+                    />
+                  </>
+                )}
                 </div>
-                <p className="text-sm text-muted-foreground">
+                
+                <p className={`text-sm text-muted-foreground ${isRTL ? 'text-right' : ''}`}>
                   {enableTimer 
-                    ? `Time per question: ${timePerQuestion[difficulty as keyof typeof timePerQuestion] / 60} minutes`
-                    : 'Quiz will have no time limit'}
+                    ? `${t.timePerQuestion}: ${timePerQuestion[difficulty as keyof typeof timePerQuestion] / 60} ${t.minutes}`
+                    : t.quizNoTimeLimit}
                 </p>
+                
                 {enableTimer && (
                   <div className="mt-2 p-2 bg-muted rounded-md">
-                    <p className="text-sm font-medium">Total Quiz Time: {formatTime(calculateTotalTime())}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Based on {questionCount} questions × {timePerQuestion[difficulty as keyof typeof timePerQuestion] / 60} minutes per question
+                    <p className={`text-sm font-medium ${isRTL ? 'text-right' : ''}`}>
+                      {t.totalQuizTime}: {formatTime(calculateTotalTime())}
+                    </p>
+                    <p className={`text-xs text-muted-foreground ${isRTL ? 'text-right' : ''}`}>
+                      {t.basedOn} {questionCount} {t.questions} × {timePerQuestion[difficulty as keyof typeof timePerQuestion] / 60} {t.minutesPerQuestion}
                     </p>
                   </div>
                 )}
@@ -409,9 +425,9 @@ export default function CreateQuiz({ conversations }: Props) {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Upload Content</CardTitle>
-              <CardDescription>Upload PDFs or images to generate quiz questions</CardDescription>
+            <CardHeader className={isRTL ? 'text-right' : ''}>
+              <CardTitle>{t.uploadContent}</CardTitle>
+              <CardDescription>{t.uploadContentDescription}</CardDescription>
             </CardHeader>
             <CardContent>
               <div
@@ -429,21 +445,21 @@ export default function CreateQuiz({ conversations }: Props) {
                   <>
                     <Loader2 className="mx-auto h-12 w-12 text-muted-foreground animate-spin" />
                     <p className="mt-2 text-sm text-muted-foreground">
-                      Processing files... Please wait
+                      {t.processingFiles}
                     </p>
                   </>
                 ) : showPreviewDialog ? (
                   <>
                     <Upload className="mx-auto h-12 w-12 text-muted-foreground opacity-50" />
                     <p className="mt-2 text-sm text-muted-foreground">
-                      Please review the current file before uploading more
+                      {t.reviewCurrentFile}
                     </p>
                   </>
                 ) : uploadedFiles.length >= 5 ? (
                   <>
                     <Upload className="mx-auto h-12 w-12 text-muted-foreground opacity-50" />
                     <p className="mt-2 text-sm text-muted-foreground">
-                      Maximum number of files (5) reached. Remove files to upload more.
+                      {t.maxFilesReached}
                     </p>
                   </>
                 ) : (
@@ -451,14 +467,14 @@ export default function CreateQuiz({ conversations }: Props) {
                     <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
                     <p className="mt-2 text-sm text-muted-foreground">
                       {isDragActive
-                        ? "Drop the files here"
-                        : "Drag & drop files here, or click to select files"}
+                        ? t.dropFilesHere
+                        : t.dropToUpload}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Supported formats: PDF, DOCX (recommended), DOC (legacy), PNG, JPG, JPEG, GIF
+                      {t.supportedFormatsExtended}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Maximum file size: 10MB
+                      {t.maxFileSizeExtended}
                     </p>
                   </>
                 )}
@@ -466,21 +482,21 @@ export default function CreateQuiz({ conversations }: Props) {
 
               {error && (
                 <div className="mt-4 p-4 border border-destructive/50 rounded-md bg-destructive/10">
-                  <p className="text-sm text-destructive font-medium mb-1">Error:</p>
-                  <pre className="text-sm text-destructive whitespace-pre-wrap">{error}</pre>
+                  <p className={`text-sm text-destructive font-medium mb-1 ${isRTL ? 'text-right' : ''}`}>{t.error}:</p>
+                  <pre className={`text-sm text-destructive whitespace-pre-wrap ${isRTL ? 'text-right' : ''}`}>{error}</pre>
                 </div>
               )}
 
               {uploadedFiles.length > 0 && (
                 <div className="mt-4 space-y-2">
-                  <h3 className="text-sm font-medium">Uploaded Files</h3>
+                  <h3 className={`text-sm font-medium ${isRTL ? 'text-right' : ''}`}>{t.uploadedFiles}</h3>
                   <div className="space-y-2">
                     {uploadedFiles.map((file, index) => (
                       <div
                         key={index}
-                        className="flex items-center justify-between p-2 border rounded-md"
+                        className={`flex items-center ${isRTL ? 'flex-row-reverse' : 'justify-between'} p-2 border rounded-md`}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                           {file.type.startsWith('image/') ? (
                             <Image className="h-4 w-4 text-muted-foreground" />
                           ) : file.type === 'application/pdf' ? (
@@ -505,13 +521,13 @@ export default function CreateQuiz({ conversations }: Props) {
             </CardContent>
           </Card>
 
-          <div className="flex justify-end gap-2">
+          <div className={`flex ${isRTL ? 'justify-start' : 'justify-end'} gap-2`}>
             <Button
               variant="outline"
               onClick={() => window.location.href = '/quizzes'}
               disabled={isLoading}
             >
-              Cancel
+              {t.cancel}
             </Button>
             <Button
               onClick={handleSubmit}
@@ -520,11 +536,11 @@ export default function CreateQuiz({ conversations }: Props) {
             >
               {(isLoading || isSubmitting) ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating Quiz...
+                  <Loader2 className={`${isRTL ? 'ml-2' : 'mr-2'} h-4 w-4 animate-spin`} />
+                  {t.creatingQuiz}
                 </>
               ) : (
-                'Create Quiz'
+                t.createQuiz
               )}
             </Button>
           </div>
@@ -533,30 +549,30 @@ export default function CreateQuiz({ conversations }: Props) {
 
       <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
         <DialogContent className="max-w-3xl max-h-[80vh] w-full">
-          <DialogHeader>
-            <DialogTitle>Extracted Text Preview</DialogTitle>
+          <DialogHeader className={isRTL ? 'text-right' : ''}>
+            <DialogTitle>{t.textPreview}</DialogTitle>
             <DialogDescription>
-              Review the extracted text from {currentFile?.name}
+              {t.reviewExtractedText} {currentFile?.name}
             </DialogDescription>
           </DialogHeader>
           <div className="relative flex-1 overflow-hidden">
             <ScrollArea className="h-[50vh] w-full">
               <div className="p-4 border rounded-md">
-                <pre className="whitespace-pre-wrap break-all text-sm" style={{ maxWidth: 'calc(100% - 2rem)' }}>{previewText}</pre>
+                <pre className={`whitespace-pre-wrap break-all text-sm ${isRTL ? 'text-right' : ''}`} style={{ maxWidth: 'calc(100% - 2rem)' }}>{previewText}</pre>
               </div>
             </ScrollArea>
           </div>
-          <DialogFooter>
+          <DialogFooter className={isRTL ? 'flex-row-reverse' : ''}>
             <Button
               variant="outline"
               onClick={handleSkipFile}
             >
-              Skip File
+              {t.skipFile}
             </Button>
             <Button
               onClick={handleConfirmFile}
             >
-              Confirm & Continue
+              {t.confirmFile}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -40,7 +40,7 @@ export function CodeBlock({ code, language, icon }: CodeBlockProps) {
       <div className="flex items-center justify-between bg-muted/40 px-3 py-1.5 border-b border-border">
         <div className="flex items-center gap-1.5">
           {icon || <Code className="h-3 w-3" />}
-          <span className="text-xs font-medium">{language}</span>
+          <span className="text-[0.7rem] font-medium">{language}</span>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -62,9 +62,9 @@ export function CodeBlock({ code, language, icon }: CodeBlockProps) {
             title={isCollapsed ? "Expand code" : "Collapse code"}
           >
             {isCollapsed ? (
-              <ChevronDown className="h-3.5 w-3.5" />
+              <ChevronDown className="h-5 w-5" />
             ) : (
-              <ChevronUp className="h-3.5 w-3.5" />
+              <ChevronUp className="h-5 w-5" />
             )}
           </button>
         </div>
@@ -72,13 +72,25 @@ export function CodeBlock({ code, language, icon }: CodeBlockProps) {
       <div 
         className={cn(
           "transition-[max-height,opacity] duration-300 ease-in-out overflow-hidden",
-          isCollapsed ? "max-h-0 opacity-0" : "max-h-[100vh] opacity-100"
+          isCollapsed ? "max-h-0 opacity-0" : "opacity-100"
         )}
       >
         <div className="p-4">
-          <pre className="text-sm font-mono whitespace-pre-wrap break-words overflow-x-auto">{trimmedCode}</pre>
+          <pre className="text-sm font-mono whitespace-pre-wrap break-words overflow-x-auto">
+            {trimmedCode}</pre>
         </div>
       </div>
     </div>
   )
 } 
+
+
+
+
+
+
+
+
+
+
+

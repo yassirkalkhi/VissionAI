@@ -13,6 +13,8 @@ import axios from "axios"
 import { createWorker } from "tesseract.js"
 import { cn } from "@/lib/utils"
 import { CodeBlock } from "@/components/CodeBlock"
+import { translations } from "@/translations"
+import { useLanguage } from "@/contexts/LanguageContext"
 
 interface Message {
   id: string | number
@@ -153,6 +155,10 @@ const countLines = (text: string): number => {
 
 const getFileExtension = () => "txt"
 
+const generateUniqueId = (prefix: string): string => {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
+
 export default function DeepSeekChat({
   currentConversation,
   messages: initialMessages = [],
@@ -172,14 +178,19 @@ export default function DeepSeekChat({
   const [collapsedCodeBlocks, setCollapsedCodeBlocks] = useState<Set<string>>(new Set())
   const [pastedCodeSnippets, setPastedCodeSnippets] = useState<{ code: string }[]>([])
   const [previewCodeIndex, setPreviewCodeIndex] = useState<number | null>(null)
+  const { t, language } = useLanguage();
+  const isRTL = language === 'ar';
 
   const eventSourceRef = useRef<EventSource | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const messageRef = useRef<string>("")
   const assistantMessageId = useRef<string | number>(Date.now())
+  const [canSubmit, setCanSubmit] = useState<boolean>(false)
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  const { data, setData, reset } = useForm({
+  const { setData, reset } = useForm({
     message: "",
     images: [] as File[],
     conversation_id: currentConversation?.id || 0,
@@ -195,15 +206,16 @@ export default function DeepSeekChat({
   }, [])
 
   useEffect(() => {
-    adjustTextareaHeight()
-  }, [data.message, adjustTextareaHeight])
-
-  useEffect(() => {
     // Only scroll on initial load
     if (messages.length > 0) {
       messagesEndRef.current?.scrollIntoView({ behavior: "auto" })
     }
   }, []) // Empty dependency array means this only runs once on mount
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages])
 
   useEffect(() => {
     return () => eventSourceRef.current?.close()
@@ -223,22 +235,43 @@ export default function DeepSeekChat({
 
   const stopGeneration = () => {
     if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-      setIsLoading(false)
-      const currentAssistantMessage = messages.find((msg) => msg.id === assistantMessageId.current)
+      console.log("Stopping message generation");
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+      
+      setIsLoading(false);
+      setIsSubmitting(false);
+      
+      const currentAssistantMessage = messages.find((msg) => msg.id === assistantMessageId.current);
       if (currentAssistantMessage && currentConversation) {
+        // Save the partial response to the server
         axios.post("/api/save-partial-response", {
           conversation_id: currentConversation.id,
           content: currentAssistantMessage.content,
           role: "assistant",
           is_partial: true,
-        }).catch(console.error)
+        })
+        .then(response => {
+          console.log("Partial response saved:", response.data);
+        })
+        .catch(error => {
+          console.error("Error saving partial response:", error);
+        });
       }
+      
+      // Mark the message as no longer streaming
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === assistantMessageId.current ? { ...msg, isStreaming: false, isThinking: false } : msg
+          msg.id === assistantMessageId.current 
+            ? { 
+                ...msg, 
+                isStreaming: false, 
+                isThinking: false,
+                content: msg.content + "\n\n[Generation stopped]" 
+              } 
+            : msg
         )
-      )
+      );
     }
   }
 
@@ -255,7 +288,7 @@ export default function DeepSeekChat({
   useEffect(() => {
     const pendingMessage = sessionStorage.getItem("pendingMessage") === "EMPTY_MESSAGE" ? "" : sessionStorage.getItem("pendingMessage"); 
     console.log("Pending message:", pendingMessage)
-    if (pendingMessage && currentConversation) {
+    if ((pendingMessage !== null) && currentConversation) {
       // Clear the pending message from sessionStorage
       sessionStorage.removeItem("pendingMessage")
       
@@ -284,91 +317,95 @@ export default function DeepSeekChat({
         sessionStorage.removeItem("textExtracted")
       }
 
-      // Create temporary assistant message for streaming
-      const tempAssistantMessage: Message = {
-        id: `assistant-${Date.now()}`,
-        content: "",
-        role: "assistant",
-        isStreaming: true,
-        isThinking: true,
-      }
+      // Only proceed if we have either a message or images
+      if (pendingMessage || pendingImages.length > 0) {
+        // Create temporary assistant message for streaming
+        const tempAssistantMessage: Message = {
+          id: generateUniqueId('assistant'),
+          content: "",
+          role: "assistant",
+          isStreaming: true,
+          isThinking: true,
+        }
 
-      assistantMessageId.current = tempAssistantMessage.id
-      setMessages((prev) => [...prev, tempAssistantMessage])
-      setIsLoading(true)
+        assistantMessageId.current = tempAssistantMessage.id
+        setMessages((prev) => [...prev, tempAssistantMessage])
+        setIsLoading(true)
       
-      // Create query params for streaming
-      const params = new URLSearchParams({
-        message: pendingMessage,
-        conversation_id: currentConversation.id.toString(),
-      })
+        // Create query params for streaming
+        const params = new URLSearchParams({
+          message: pendingMessage || "",
+          conversation_id: currentConversation.id.toString(),
+        })
       
-      // Add extracted text if available
-      if (pendingExtractedText) {
-        params.append("extracted_text", pendingExtractedText)
-      }
+        // Add extracted text if available
+        if (pendingExtractedText) {
+          params.append("extracted_text", pendingExtractedText)
+        }
       
-      // Add image paths to params
-      pendingImages.forEach((img) => params.append("images[]", img.path))
+        // Add image paths to params
+        pendingImages.forEach((img) => params.append("images[]", img.path))
       
-      // Create new EventSource
-      const eventSource = new EventSource(`/chat-stream?${params.toString()}`)
-      eventSourceRef.current = eventSource
+        // Create new EventSource
+        const eventSource = new EventSource(`/chat-stream?${params.toString()}`)
+        eventSourceRef.current = eventSource
       
-      eventSource.onmessage = (event) => {
-        const { content, finished } = JSON.parse(event.data)
+        eventSource.onmessage = (event) => {
+          const { content, finished } = JSON.parse(event.data)
 
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMessageId.current
-              ? {
-            ...msg,
-            content: msg.content + content,
-                  isStreaming: !finished,
-                  isThinking: false,
-                }
-                : msg,
-          ),
-        )
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId.current
+                ? {
+              ...msg,
+              content: msg.content + content,
+                    isStreaming: !finished,
+                    isThinking: false,
+                  }
+                  : msg,
+            ),
+          )
         
-        if (finished) {
-          eventSource.close()
-          setIsLoading(false)
+          if (finished) {
+            eventSource.close()
+            setIsLoading(false)
+            setIsSubmitting(false);
           
-          // Fetch the conversation data to get the correct message IDs
-          axios
-            .get(`/api/conversations/${currentConversation.id}`)
-            .then((response) => {
-              const conversationData = response.data
-              // Preserve message order by keeping existing messages and only updating IDs
-              setMessages((prev) => {
-                const existingMessages = [...prev]
-                const serverMessages = conversationData.messages
+            // Fetch the conversation data to get the correct message IDs
+            axios
+              .get(`/api/conversations/${currentConversation.id}`)
+              .then((response) => {
+                const conversationData = response.data
+                // Preserve message order by keeping existing messages and only updating IDs
+                setMessages((prev) => {
+                  const existingMessages = [...prev]
+                  const serverMessages = conversationData.messages
 
-                // Update message IDs while maintaining order
-                return existingMessages.map((msg) => {
-                  const serverMsg = serverMessages.find(
-                    (sMsg: Message) => sMsg.role === msg.role && sMsg.content === msg.content,
-                  )
-                  return serverMsg || msg
+                  // Update message IDs while maintaining order
+                  return existingMessages.map((msg) => {
+                    const serverMsg = serverMessages.find(
+                      (sMsg: Message) => sMsg.role === msg.role && sMsg.content === msg.content,
+                    )
+                    return serverMsg || msg
+                  })
                 })
               })
-            })
-            .catch((error) => {
-              console.error("Error fetching conversation data:", error)
-            })
+              .catch((error) => {
+                console.error("Error fetching conversation data:", error)
+              })
+          }
         }
-      }
       
-      eventSource.onerror = (error) => {
-        console.error("Stream error:", error)
-        eventSource.close()
-        setIsLoading(false)
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantMessageId.current ? { ...msg, isStreaming: false, isThinking: false } : msg,
-          ),
-        )
+        eventSource.onerror = (error) => {
+          console.error("Stream error:", error)
+          eventSource.close()
+          setIsLoading(false)
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId.current ? { ...msg, isStreaming: false, isThinking: false } : msg,
+            ),
+          )
+        }
       }
     }
   }, [currentConversation])
@@ -376,37 +413,72 @@ export default function DeepSeekChat({
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return
     
-    const newFiles = Array.from(e.target.files).slice(0, 3 - imageFiles.length)
-    const updatedFiles = [...imageFiles, ...newFiles]
+    console.log("Files selected:", e.target.files.length);
     
-    setImageFiles(updatedFiles)
-    setData("images", updatedFiles)
-    setExtractedText("")
-
-    newFiles.forEach((file, index) => {
-      const reader = new FileReader()
+    // Filter out non-image files AND restrict to supported formats (jpeg, png, jpg, gif)
+    const supportedFormats = ['image/jpeg', 'image/png', 'image/jpg', 'image/gif'];
+    const selectedFiles = Array.from(e.target.files).filter(file => 
+      supportedFormats.includes(file.type.toLowerCase())
+    );
+    
+    console.log("Filtered supported files:", selectedFiles.length);
+    
+    if (selectedFiles.length === 0) return;
+    
+    // Calculate how many more files we can add (maximum of 3 total)
+    const currentFilesCount = imageFiles.length;
+    const remainingSlots = Math.max(0, 3 - currentFilesCount);
+    const filesToAdd = selectedFiles.slice(0, remainingSlots);
+    
+    console.log(`Can add ${remainingSlots} more files, adding ${filesToAdd.length} files`);
+    
+    if (filesToAdd.length === 0) return;
+    
+    // Update the files array
+    const updatedFiles = [...imageFiles, ...filesToAdd];
+    console.log("Updated files array:", updatedFiles.length);
+    
+    setImageFiles(updatedFiles);
+    setData("images", updatedFiles);
+    setExtractedText(""); // Reset extracted text before processing new images
+    
+    // Process each new file for preview and text extraction
+    filesToAdd.forEach((file, index) => {
+      console.log(`Processing file ${index}: ${file.name}`);
+      
+      const reader = new FileReader();
       reader.onload = (e: ProgressEvent<FileReader>) => {
-        const result = e.target?.result
+        const result = e.target?.result;
         if (result) {
-          setImagePreviews((prev) => [...prev, result as string])
-          const currentIndex = imageFiles.length + index
-          setIsExtracting((prev) => [...prev, currentIndex])
+          console.log(`Adding preview for file ${index}: ${file.name}`);
+          setImagePreviews(prev => [...prev, result as string]);
+          
+          // Use the actual index in the combined array for extraction tracking
+          const extractionIndex = currentFilesCount + index;
+          setIsExtracting(prev => [...prev, extractionIndex]);
 
           extractTextFromImage(file)
             .then((text) => {
+              console.log(`Extracted text from ${file.name}:`, text ? "yes" : "no");
               if (text) {
-                setExtractedText((prev) => (prev ? prev + "\n\n" : "") + text)
+                setExtractedText(prev => (prev ? prev + "\n\n" : "") + text);
               }
-              setIsExtracting((prev) => prev.filter((idx) => idx !== currentIndex))
+              setIsExtracting(prev => prev.filter(idx => idx !== extractionIndex));
             })
-            .catch(() => {
-              setIsExtracting((prev) => prev.filter((idx) => idx !== currentIndex))
-            })
+            .catch((error) => {
+              console.error(`Error extracting text from ${file.name}:`, error);
+              setIsExtracting(prev => prev.filter(idx => idx !== extractionIndex));
+            });
         }
-      }
-      reader.readAsDataURL(file)
-    })
-  }
+      };
+      reader.readAsDataURL(file);
+    });
+    
+    // Reset file input to allow selecting the same file again if needed
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const extractTextFromImage = async (imageFile: File): Promise<string> => {
     try {
@@ -421,40 +493,90 @@ export default function DeepSeekChat({
   }
 
   const removeImage = (index: number) => {
-    const updatedFiles = imageFiles.filter((_, i) => i !== index)
-    setImageFiles(updatedFiles)
-    setData("images", updatedFiles)
-    setImagePreviews((prev) => prev.filter((_, i) => i !== index))
-    setExtractedText("")
-  }
+    console.log(`Removing image at index ${index}`);
+    console.log(`Before removal: imageFiles=${imageFiles.length}, imagePreviews=${imagePreviews.length}`);
+    
+    // Update the files array
+    const updatedFiles = imageFiles.filter((_, i) => i !== index);
+    setImageFiles(updatedFiles);
+    setData("images", updatedFiles);
+    
+    // Update the previews array
+    setImagePreviews((prev) => {
+      const updated = prev.filter((_, i) => i !== index);
+      console.log(`After removal: updated previews length=${updated.length}`);
+      return updated;
+    });
+    
+    // Clear extracted text when removing images
+    if (updatedFiles.length === 0) {
+      setExtractedText("");
+    }
+  };
+
+  // Check if message can be submitted
+  useEffect(() => {
+    let hasText = false;
+    if (textareaRef.current && textareaRef.current.value) {
+      hasText = textareaRef.current.value.trim().length > 0;
+    }
+    const hasImages = imageFiles.length > 0;
+    const notLoading = !isLoading && isExtracting.length === 0;
+    
+    setCanSubmit((hasText || hasImages) && notLoading);
+  }, [imageFiles, isLoading, isExtracting]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!data.message.trim() && !imageFiles.length) return
+    
+    // Prevent multiple submissions
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    
+    const messageContent = textareaRef.current?.value?.trim() || ""
+    if (!messageContent && imageFiles.length === 0) {
+      setIsSubmitting(false);
+      return;
+    }
 
     let uploadedImages: Array<{ path: string; url: string; name: string; contentType?: string }> = []
     try {
       if (imageFiles.length > 0) {
-        const formData = new FormData()
-        imageFiles.forEach((file) => formData.append("images[]", file))
-        const response = await axios.post("/api/upload-images", formData)
-        uploadedImages = response.data.images
+        // Verify again that all files are valid supported images
+        const supportedFormats = ['image/jpeg', 'image/png', 'image/jpg', 'image/gif'];
+        const validImages = imageFiles.filter(file => supportedFormats.includes(file.type.toLowerCase()));
+        
+        if (validImages.length > 0) {
+          const formData = new FormData()
+          validImages.forEach((file) => formData.append("images[]", file))
+          
+          try {
+            const response = await axios.post("/api/upload-images", formData)
+            uploadedImages = response.data.images
+          } catch (error) {
+            // Silently handle upload errors - don't show to user
+            console.error("Image upload failed:", error)
+            // Continue with text-only message
+          }
+        }
       }
     } catch (error) {
-      console.error("Image upload failed:", error)
-      return
+      // Silently handle any other errors
+      console.error("Image processing error:", error)
+      // Continue with text-only message
     }
 
-    let messageContent = data.message
+    let finalMessageContent = messageContent
     if (pastedCodeSnippets.length > 0) {
-      messageContent +=
+      finalMessageContent +=
         "\n\n" +
         pastedCodeSnippets.map((snippet) => `\`\`\`\n${snippet.code}\n\`\`\``).join("\n\n")
     }
 
+    const uniqueUserId = generateUniqueId('user');
     const tempUserMessage: Message = {
-      id: `user-${Date.now()}`,
-      content: messageContent,
+      id: uniqueUserId,
+      content: finalMessageContent,
       role: "user",
       attachments: uploadedImages.map((img) => ({
         url: img.url,
@@ -464,8 +586,9 @@ export default function DeepSeekChat({
 
     setMessages((prev) => [...prev, tempUserMessage])
 
+    const uniqueAssistantId = generateUniqueId('assistant');
     const tempAssistantMessage: Message = {
-      id: `assistant-${Date.now()}`,
+      id: uniqueAssistantId,
       content: "",
       role: "assistant",
       isStreaming: true,
@@ -475,11 +598,12 @@ export default function DeepSeekChat({
     assistantMessageId.current = tempAssistantMessage.id
     setMessages((prev) => [...prev, tempAssistantMessage])
     setIsLoading(true)
+    setIsSubmitting(true); // Prevent other submissions while regenerating
 
     try {
       const params = new URLSearchParams({
-        message: messageContent,
-        conversation_id: data.conversation_id.toString(),
+        message: finalMessageContent,
+        conversation_id: currentConversation?.id.toString() || "0",
       })
       
       if (extractedText) {
@@ -493,7 +617,7 @@ export default function DeepSeekChat({
       eventSourceRef.current = eventSource
 
       eventSource.onmessage = (event) => {
-        const { content, finished, error } = JSON.parse(event.data)
+        const { content, finished } = JSON.parse(event.data)
 
         setMessages((prev) =>
           prev.map((msg) =>
@@ -511,6 +635,7 @@ export default function DeepSeekChat({
         if (finished) {
           eventSource.close()
           setIsLoading(false)
+          setIsSubmitting(false);
           setTimeout(() => {
             setMessages((prev) =>
               prev.map((msg) =>
@@ -525,7 +650,7 @@ export default function DeepSeekChat({
           }, 300)
           
           axios
-            .get(`/api/conversations/${data.conversation_id}`)
+            .get(`/api/conversations/${currentConversation?.id}`)
             .then((response) => {
               const conversationData = response.data
               setMessages((prev) => {
@@ -550,6 +675,7 @@ export default function DeepSeekChat({
         console.error("Stream error:", error)
         eventSource.close()
         setIsLoading(false)
+        setIsSubmitting(false);
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantMessageId.current
@@ -564,10 +690,18 @@ export default function DeepSeekChat({
         )
       }
 
+      // Clear the textarea using the ref instead of state
+      if (textareaRef.current) {
+        textareaRef.current.value = ""
+        messageRef.current = ""
+      }
+      
       reset("message")
       setImageFiles([])
       setImagePreviews([])
       setExtractedText("")
+      setPastedCodeSnippets([]) // Also clear any pasted code snippets
+      setCanSubmit(false) // Reset submit button state
       if (fileInputRef.current) fileInputRef.current.value = ""
 
       if (textareaRef.current) {
@@ -577,15 +711,21 @@ export default function DeepSeekChat({
     } catch (error) {
       console.error("Error starting stream:", error)
       setIsLoading(false)
+      setIsSubmitting(false);
       setMessages((prev) => [
         ...prev.filter((msg) => msg.id !== assistantMessageId.current),
         {
-          id: `error-${Date.now()}`,
+          id: generateUniqueId('error'),
           content: "Sorry, there was an error processing your request.",
           role: "assistant",
         },
       ])
     }
+    
+    // Reset submission state after a delay
+    setTimeout(() => {
+      setIsSubmitting(false);
+    }, 1000);
   }
 
   const toggleCodeBlock = (blockId: string) => {
@@ -626,7 +766,7 @@ export default function DeepSeekChat({
       if (!textContent) return null
 
       return (
-        <div key={index} className="prose dark:prose-invert max-w-none">
+        <div key={index} className={`prose dark:prose-invert max-w-none`}>
           <ReactMarkdown
             components={{
               p: ({ children }) => <p className="mb-4 last:mb-0">{children}</p>,
@@ -634,14 +774,14 @@ export default function DeepSeekChat({
                 <code className="bg-muted/20 px-1 py-0.5 rounded text-sm">{children}</code>
               ),
               pre: ({ children }) => <pre className="overflow-x-auto">{children}</pre>,
-              ul: ({ children }) => <ul className="list-disc pl-6 mb-2">{children}</ul>,
-              ol: ({ children }) => <ol className="list-decimal pl-6 mb-2">{children}</ol>,
+              ul: ({ children }) => <ul className={`list-disc mb-2`}>{children}</ul>,
+              ol: ({ children }) => <ol className={`list-decimal  mb-2`}>{children}</ol>,
               li: ({ children }) => <li className="mb-1">{children}</li>,
               h1: ({ children }) => <h1 className="text-2xl font-bold mb-1 mt-2">{children}</h1>,
               h2: ({ children }) => <h2 className="text-xl font-bold mb-1 mt-2">{children}</h2>,
               h3: ({ children }) => <h3 className="text-lg font-bold mb-1 mt-2">{children}</h3>,
               blockquote: ({ children }) => (
-                <blockquote className="border-l-4 border-border pl-4 italic my-4">{children}</blockquote>
+                <blockquote className={`border-l-4 border-border  italic my-4`}>{children}</blockquote>
               ),
             }}
           >
@@ -656,7 +796,7 @@ export default function DeepSeekChat({
     if (!content) return null;
 
     return (
-      <div className={cn("space-y-4", isUserMessage ? "whitespace-pre-wrap" : "")}>
+      <div className={cn("space-y-4", isUserMessage ? "whitespace-pre-wrap" : "",)}>
         {formatCodeBlocks(content)}
       </div>
     );
@@ -730,10 +870,11 @@ export default function DeepSeekChat({
   }
 
   const regenerateResponse = async (userMessage: string) => {
-    if (isLoading) return
+    if (isLoading || isSubmitting) return
 
+    const uniqueAssistantId = generateUniqueId('assistant');
     const tempAssistantMessage: Message = {
-      id: `assistant-${Date.now()}`,
+      id: uniqueAssistantId,
       content: "",
       role: "assistant",
       isStreaming: true,
@@ -743,11 +884,12 @@ export default function DeepSeekChat({
     assistantMessageId.current = tempAssistantMessage.id
     setMessages((prev) => [...prev, tempAssistantMessage])
     setIsLoading(true)
+    setIsSubmitting(true); // Prevent other submissions while regenerating
 
     try {
       const params = new URLSearchParams({
         message: userMessage,
-        conversation_id: data.conversation_id.toString(),
+        conversation_id: currentConversation?.id.toString() || "0",
       })
 
       eventSourceRef.current?.close()
@@ -775,7 +917,7 @@ export default function DeepSeekChat({
           setIsLoading(false)
           
           axios
-            .get(`/api/conversations/${data.conversation_id}`)
+            .get(`/api/conversations/${currentConversation?.id}`)
             .then((response) => {
               const conversationData = response.data
               setMessages((prev) => {
@@ -800,6 +942,7 @@ export default function DeepSeekChat({
         console.error("Stream error:", error)
         eventSource.close()
         setIsLoading(false)
+        setIsSubmitting(false);
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === assistantMessageId.current
@@ -816,28 +959,34 @@ export default function DeepSeekChat({
     } catch (error) {
       console.error("Error starting stream:", error)
       setIsLoading(false)
+      setIsSubmitting(false);
       setMessages((prev) => [
         ...prev.filter((msg) => msg.id !== assistantMessageId.current),
         {
-          id: `error-${Date.now()}`,
+          id: generateUniqueId('error'),
           content: "Sorry, there was an error processing your request.",
           role: "assistant",
         },
       ])
     }
+    
+    // Reset submission state after a delay
+    setTimeout(() => {
+      setIsSubmitting(false);
+    }, 1000);
   }
 
   return (
-    <AppSidebarLayout conversations={conversations} breadcrumbs={breadcrumbs}>
+    <AppSidebarLayout breadcrumbs={breadcrumbs}>
       <Head title="DeepSeek Chat" />
       <div className="flex h-[calc(100vh-8rem)] flex-col">
         <div className="flex-1 overflow-hidden flex flex-col">
           <div className="flex-1 overflow-y-auto p-4">
-            <div className="max-w-3xl mx-auto space-y-5">
+          <div className="max-w-3xl mx-auto space-y-5">
               {isLoadingChats ? (
                 <>
                   {[1, 2, 3].map((i) => (
-                    <div key={i} className="flex items-start gap-2">
+                    <div key={i} className={`flex items-start gap-2`}>
                       <Skeleton className="h-8 w-8 rounded-md" />
                       <div className="space-y-12 flex-1">
                         <Skeleton className="h-30 w-full" />
@@ -859,17 +1008,18 @@ export default function DeepSeekChat({
                       )}
                     </div>
 
-                    <div className="flex-1">
-                      <div className={cn("rounded-lg p-3 relative text-sm", message.isThinking ? "flex items-center" : "")}>
+                    <div className="flex-1 ml-3">
+                    <div className={cn("rounded-lg p-3 relative text-sm", message.isThinking ? "flex items-center" : "")}>
                         {message.isThinking ? (
-                          <div className="flex items-center text-muted-foreground">
-                            <span className="thinking-pulse mr-2">Thinking </span>
+                           <div className="flex items-center text-muted-foreground">
+                           <span className="thinking-pulse mr-2">{t.thinking || "Thinking"}</span>
+                           <span className="thinking-pulse" style={{ animationDelay: "0.3s" }}>.</span>
                             <span className="thinking-pulse" style={{ animationDelay: "0.3s" }}>.</span>
                             <span className="thinking-pulse" style={{ animationDelay: "0.6s" }}>.</span>
                             <span className="thinking-pulse" style={{ animationDelay: "0.9s" }}>.</span>
                           </div>
                         ) : (
-                    <div className="whitespace-pre-wrap">
+                          <div className="whitespace-pre-wrap">
                             {message.role === "assistant" ? (
                               <SimpleMarkdown content={message.content} />
                             ) : (
@@ -880,7 +1030,7 @@ export default function DeepSeekChat({
                       </div>
 
                       {message.content && !message.isThinking && (
-                        <div className="transition-opacity flex items-center gap-2 mt-2 ms-3 text-muted-foreground">
+                              <div className="transition-opacity flex items-center gap-2 mt-2 ms-3 text-muted-foreground">
                           <button
                             onClick={() => copyToClipboard(message.content, message.id)}
                             className="text-xs flex items-center gap-1 hover:text-foreground transition-colors relative"
@@ -890,8 +1040,8 @@ export default function DeepSeekChat({
                               <>
                                 <Check className="h-3 w-3 text-green-500" />
                                 <span className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-background border border-border rounded px-2 py-1 text-xs whitespace-nowrap">
-                                  Copied!
-                        </span>
+                                  {t.copied}
+                                </span>
                               </>
                             ) : (
                               <Copy className="h-4 w-4 hover:scale-110 transition-transform" />
@@ -908,29 +1058,36 @@ export default function DeepSeekChat({
                               }}
                               className="text-xs flex items-center gap-1 hover:text-foreground transition-colors"
                               disabled={isLoading}
-                              title="Regenerate response"
                             >
                               <RefreshCw className="h-4 w-4 hover:scale-110 transition-transform" />
                             </button>
-                      )}
-                    </div>
+                          )}
+                        </div>
                       )}
 
-                      {message.role === "user" && (
-                        <div className="flex flex-wrap gap-2 mt-2 overflow-x-auto pb-2 ms-4">
-                    {message.attachments?.map((attachment, i) => (
+                      {message.role === "user" && message.attachments && message.attachments.length > 0 && (
+                        <div className={`flex flex-wrap gap-2 mt-2 overflow-x-auto pb-2 ${isRTL ? 'justify-end mr-4' : 'ms-4'}`}>
+                          {message.attachments?.map((attachment, i) => (
                             <button
                               key={`img-${i}`}
-                              onClick={() => setSelectedImage(attachment.url)}
-                              className="flex items-center gap-2 p-2 bg-background rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                              onClick={() => {
+                                // Try to fix URL if needed
+                                let imgUrl = attachment.url;
+                                if (imgUrl.includes('/storage/')) {
+                                  const pathPart = imgUrl.split('/storage/')[1];
+                                  imgUrl = window.location.origin + '/storage/' + pathPart;
+                                }
+                                setSelectedImage(imgUrl);
+                              }}
+                              className={`flex items-center gap-2 p-2 bg-background rounded-lg border border-border hover:bg-muted/50 transition-colors ${isRTL ? 'flex-row-reverse' : ''}`}
                             >
                               <FileText className="h-3.5 w-3.5 text-primary" />
                               <span className="text-xs">Document {i + 1}</span>
                             </button>
-                    ))}
-                  </div>
+                          ))}
+                        </div>
                       )}
-                </div>
+                    </div>
                   </div>
                 ))
               )}
@@ -942,52 +1099,67 @@ export default function DeepSeekChat({
             <div className="max-w-3xl mx-auto p-4">
               {(imagePreviews.length > 0 || pastedCodeSnippets.length > 0) && (
                 <div className="mb-3 border border-border rounded-md p-2 bg-background">
-                  <div className="flex overflow-x-auto pb-2 gap-2">
-                  {imagePreviews.map((preview, i) => (
-                      <div key={`img-${i}`} className="relative h-16 w-16 flex-shrink-0 rounded-md overflow-hidden">
-                        <img
-                          src={preview || "/placeholder.svg"}
-                          alt={`Preview ${i}`}
-                          className="h-full w-full object-cover"
-                        />
-                        {isExtracting.includes(i) && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-background/70 dark:bg-background/70">
-                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  <div className={`flex overflow-x-auto pb-2 gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    {imagePreviews.length > 0 && (
+                      <>
+                        {imagePreviews.map((preview, i) => (
+                          <div key={`img-${i}`} className="relative h-16 w-16 flex-shrink-0 rounded-md overflow-hidden border border-border">
+                            <img
+                              src={preview || "/placeholder.svg"}
+                              alt={`Preview ${i}`}
+                              className="h-full w-full object-cover"
+                              onError={(e) => {
+                                console.error(`Failed to load image preview ${i}`);
+                                // Try fallback to direct access if using storage URL failed
+                                const currentSrc = e.currentTarget.src;
+                                if (currentSrc.includes('/storage/')) {
+                                  const pathPart = currentSrc.split('/storage/')[1];
+                                  e.currentTarget.src = window.location.origin + '/storage/' + pathPart;
+                                } else {
+                                  e.currentTarget.src = "/placeholder.svg";
+                                }
+                              }}
+                            />
+                            {isExtracting.includes(i) && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-background/70 dark:bg-background/70">
+                                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => removeImage(i)}
+                              className={`absolute top-0 ${isRTL ? 'left-0' : 'right-0'} bg-black/70 rounded-full p-0.5`}
+                              title="Remove image"
+                            >
+                              <X className="h-3 w-3 text-white" />
+                            </button>
                           </div>
-                        )}
-                      <button
-                        type="button"
-                        onClick={() => removeImage(i)}
-                        className="absolute top-0 right-0 bg-black/70 rounded-full p-0.5"
-                          title="Remove image"
-                      >
-                        <X className="h-3 w-3 text-white" />
-                      </button>
-                    </div>
-                  ))}
+                        ))}
+                      </>
+                    )}
 
                     {pastedCodeSnippets.map((snippet, index) => {
                       const extension = getFileExtension()
                       return (
                         <div
                           key={`code-${index}`}
-                          className="flex-shrink-0 w-48 h-16 flex flex-col bg-muted/30 rounded-md border border-border overflow-hidden hover:shadow-sm transition-shadow"
+                          className={`flex-shrink-0 w-48 h-16 flex flex-col bg-muted/30 rounded-md border border-border overflow-hidden hover:shadow-sm transition-shadow`}
                         >
-                          <div className="flex items-center justify-between bg-muted/50 px-2 py-1 border-b border-border">
+                          <div className={`flex items-center justify-between bg-muted/50 px-2 py-1 border-b border-border ${isRTL ? 'flex-row-reverse' : ''}`}>
                             <div className="flex items-center flex-1 gap-1 select-none">
                               <span className="text-[0.7rem] font-medium truncate">
                                 file{index + 1}.{extension}
                               </span>
-                </div>
+                            </div>
                             <button
-                          type="button"
+                              type="button"
                               onClick={() => {
                                 setPastedCodeSnippets((prev) => prev.filter((_, i) => i !== index))
                                 if (previewCodeIndex === index) {
                                   setPreviewCodeIndex(null)
                                 }
                               }}
-                              className="text-xs text-muted-foreground hover:text-foreground ml-1"
+                              className={`text-xs text-muted-foreground hover:text-foreground ${isRTL ? 'mr-1' : 'ml-1'}`}
                               title="Remove code snippet"
                             >
                               <X className="h-3 w-3" />
@@ -997,7 +1169,7 @@ export default function DeepSeekChat({
                             className="flex-1 p-1 overflow-hidden cursor-pointer"
                             onClick={() => setPreviewCodeIndex(index)}
                           >
-                            <pre className="text-[0.2rem] pt-1 text-muted-foreground">
+                            <pre className={`text-[0.2rem] pt-1 text-muted-foreground ${isRTL ? 'text-right' : ''}`}>
                               {snippet.code.substring(0, 100)}
                             </pre>
                           </div>
@@ -1010,24 +1182,56 @@ export default function DeepSeekChat({
 
               <TooltipProvider>
                 <form onSubmit={handleSubmit} className="relative">
-                  <div className="relative flex-1 flex items-start rounded-lg border border-input bg-background focus-within:ring-1 focus-within:ring-ring">
+                  <div className={`relative flex-1 flex items-start rounded-lg border border-input bg-background focus-within:ring-1 focus-within:ring-ring ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <textarea
                       ref={textareaRef}
-                      value={data.message}
-                      onChange={(e) => setData("message", e.target.value)}
-                      placeholder="Type a message..."
-                      className="w-full rounded-lg py-3 pl-4 pr-24 resize-none focus-visible:outline-none bg-transparent text-sm"
+                      placeholder={t.typeMessage}
+                      className={`w-full rounded-lg py-3 ${isRTL ? 'pl-24 pr-4 text-right' : 'pl-4 pr-24'} resize-none focus-visible:outline-none bg-transparent text-sm overflow-hidden`}
                       style={{ height: `${textareaHeight}px` }}
                       disabled={isLoading || isExtracting.length > 0}
+                      onInput={(e) => {
+                        const target = e.target as HTMLTextAreaElement;
+                        messageRef.current = target.value;
+                        // Update canSubmit state when textarea content changes
+                        setCanSubmit(
+                          (target.value?.trim()?.length > 0 || imageFiles.length > 0) && 
+                          !isLoading && 
+                          isExtracting.length === 0
+                        );
+                        adjustTextareaHeight();
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault()
-                          const form = e.currentTarget.form
-                          form?.requestSubmit()
-                        } else if (e.key === "Enter" && e.ctrlKey) {
-                          e.preventDefault()
-                          setData("message", data.message + "\n")
-                          setTimeout(adjustTextareaHeight, 0)
+                          e.preventDefault();
+                          // Only submit if the form can be submitted
+                          if (canSubmit) {
+                            const form = e.currentTarget.form;
+                            form?.requestSubmit();
+                          }
+                        } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                          e.preventDefault();
+                          if (textareaRef.current) {
+                            const cursorPos = textareaRef.current.selectionStart;
+                            const value = textareaRef.current.value || "";
+                            const newValue = value.substring(0, cursorPos) + "\n" + value.substring(cursorPos);
+                            textareaRef.current.value = newValue;
+                            
+                            // Set the cursor position after the inserted newline
+                            setTimeout(() => {
+                              if (textareaRef.current) {
+                                textareaRef.current.selectionStart = cursorPos + 1;
+                                textareaRef.current.selectionEnd = cursorPos + 1;
+                                messageRef.current = textareaRef.current.value;
+                                // Update canSubmit state
+                                setCanSubmit(
+                                  (textareaRef.current.value?.trim()?.length > 0 || imageFiles.length > 0) && 
+                                  !isLoading && 
+                                  isExtracting.length === 0
+                                );
+                                adjustTextareaHeight();
+                              }
+                            }, 0);
+                          }
                         }
                       }}
                       onPaste={(e) => {
@@ -1039,9 +1243,10 @@ export default function DeepSeekChat({
                           setPastedCodeSnippets((prev) => [...prev, { code: pastedText }])
                         }
                       }}
+                      dir={isRTL ? "rtl" : "ltr"}
                     />
 
-                    <div className="absolute right-2 top-2 flex items-center gap-2">
+                    <div className={`absolute ${isRTL ? 'left-2' : 'right-2'} top-2 flex items-center gap-2`}>
                       <Button
                         type="button"
                         size="icon"
@@ -1057,10 +1262,7 @@ export default function DeepSeekChat({
                         type={isLoading ? "button" : "submit"}
                         size="icon"
                         className="h-8 w-8"
-                        disabled={
-                          isExtracting.length > 0 ||
-                          (!isLoading && !data.message.trim() && !imageFiles.length)
-                        }
+                        disabled={isLoading ? false : !canSubmit || isSubmitting}
                         onClick={(e) => {
                           if (isLoading) {
                             e.preventDefault()
@@ -1068,7 +1270,7 @@ export default function DeepSeekChat({
                           }
                         }}
                       >
-                        {isLoading ? <Square className="h-2 w-2" /> : <ArrowUp className="h-4 w-4" />}
+                        {isLoading ? <Square className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
                       </Button>
                     </div>
 
@@ -1076,19 +1278,19 @@ export default function DeepSeekChat({
                       type="file"
                       ref={fileInputRef}
                       onChange={handleImageSelect}
-                      accept="image/*"
+                      accept="image/jpeg,image/png,image/jpg,image/gif"
                       multiple
                       className="hidden"
                       disabled={imageFiles.length >= 3 || isLoading || isExtracting.length > 0}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">Press Enter to send, Ctrl+Enter for line break</p>
-                </form>
+                  <p className={`text-xs text-muted-foreground mt-2 ${isRTL ? 'text-right' : ''}`}>{t.pressEnterToSend + " , " + t.pressCtrlEnterNewLine}</p>
+                </form> 
               </TooltipProvider>
             </div>
           </div>
         </div>
-                  </div>
+      </div>
 
       <Dialog open={!!selectedImage} onOpenChange={(open) => !open && setSelectedImage(null)}>
         <DialogContent className="max-w-3xl w-full p-0 overflow-hidden">
@@ -1098,7 +1300,17 @@ export default function DeepSeekChat({
                 src={selectedImage || "/placeholder.svg"}
                 alt="Document preview"
                 className="w-full h-full object-contain"
+                onError={(e) => {
+                  console.error("Failed to load modal image");
+                  e.currentTarget.src = "/placeholder.svg";
+                }}
               />
+              <button 
+                onClick={() => setSelectedImage(null)}
+                className={`absolute top-2 ${isRTL ? 'left-2' : 'right-2'} p-2 bg-background/80 rounded-full hover:bg-background transition-colors`}
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
           )}
         </DialogContent>
@@ -1115,11 +1327,11 @@ export default function DeepSeekChat({
 
             return (
               <div className="relative w-full">
-                <div className="flex items-center mb-3 px-1">
+                <div className={`flex items-center mb-3 px-1 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <h3 className="text-xs font-medium flex items-center gap-2">
                     <span>file{previewCodeIndex + 1}.txt</span>
                   </h3>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground pl-4">
+                  <div className={`flex items-center gap-3 text-xs text-muted-foreground ${isRTL ? 'pr-4' : 'pl-4'}`}>
                     <span>{sizeKB} KB</span>
                     <span>•</span>
                     <span>{lineCount} lines</span>
@@ -1128,14 +1340,14 @@ export default function DeepSeekChat({
                   </div>
                 </div>
                 <div className="rounded-md border border-border overflow-hidden">
-                  <div className="bg-muted/50 px-3 py-2 border-b border-border flex items-center justify-between">
+                  <div className={`bg-muted/50 px-3 py-2 border-b border-border flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
                     <div className="flex items-center text-xs">
-                      <span className="text-[0.6rem] font-medium ml-2">Code</span>
+                      <span className={`text-[0.6rem] font-medium ${isRTL ? 'mr-2' : 'ml-2'}`}>Code</span>
                     </div>
                     <button
                       onClick={() => copyToClipboard(code, `code-${previewCodeIndex}`)}
                       className="text-xs flex items-center gap-1 hover:text-foreground transition-colors"
-                      title="Copy code"
+                      title={t.copyCode}
                     >
                       {copiedMessageId === `code-${previewCodeIndex}` ? (
                         <Check className="h-3.5 w-3.5 text-green-400" />
@@ -1143,14 +1355,14 @@ export default function DeepSeekChat({
                         <Copy className="h-4 w-4 hover:opacity-50" />
                       )}
                     </button>
-            </div>
-                  <div className="max-h-[calc(70vh-100px)] overflow-auto bg-background p-5">
-                    <pre className="text-xs font-mono whitespace-pre-wrap overflow-x-scroll break-words">
+                  </div>
+                  <div className={`max-h-[calc(70vh-100px)] overflow-auto bg-background p-5 ${isRTL ? 'text-right' : ''}`}>
+                    <pre className={`text-xs font-mono whitespace-pre-wrap overflow-x-scroll break-words ${isRTL ? 'direction-ltr' : ''}`} dir="ltr">
                       {code}
                     </pre>
-          </div>
-        </div>
-      </div>
+                  </div>
+                </div>
+              </div>
             )
           })()}
         </DialogContent>

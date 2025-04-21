@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import AppSidebarLayout from "@/layouts/app/app-sidebar-layout"
 import type { BreadcrumbItem, Conversation } from "@/types"
 import { toast } from "react-hot-toast"
+import { useLanguage } from "@/contexts/LanguageContext"
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: "VisionAI", href: "/chat" }]
 
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export default function Chat({ conversations = [] }: Props) {
+  const { t } = useLanguage()
   const [isCreating, setIsCreating] = useState(false)
   const [message, setMessage] = useState("")
   const [imageFiles, setImageFiles] = useState<File[]>([])
@@ -213,13 +215,13 @@ export default function Chat({ conversations = [] }: Props) {
 
   return (
     <AppSidebarLayout conversations={conversations} breadcrumbs={breadcrumbs}>
-      <Head title="New Chat" />
+      <Head title={t.newChat} />
       <div className="h-[calc(100vh-8rem)] overflow-y-auto">
         <div className="max-w-3xl mx-auto p-4 space-y-8">
           {/* Welcome and Input Section */}
           <div className="text-center mt-12 ">
-            <h1 className="text-2xl font-bold mb-2">Start a New Chat</h1>
-            <p className="text-muted-foreground">Ask a question or upload an image to get started</p>
+            <h1 className="text-2xl font-bold mb-2">{t.startNewChat}</h1>
+            <p className="text-muted-foreground">{t.welcomeMessage}</p>
           </div>
 
           <TooltipProvider>
@@ -229,7 +231,7 @@ export default function Chat({ conversations = [] }: Props) {
                   ref={textareaRef}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Type a message..."
+                  placeholder={t.typeMessage}
                   className="w-full rounded-lg py-3 pl-4 pr-24 resize-none focus-visible:outline-none bg-transparent text-sm"
                   style={{ height: `${textareaHeight}px` }}
                   disabled={isExtracting.length > 0 || isCreating}
@@ -291,7 +293,7 @@ export default function Chat({ conversations = [] }: Props) {
                   disabled={imageFiles.length >= 3 || isExtracting.length > 0 || isCreating}
                 />
               </div>
-              <p className="text-xs text-muted-foreground mt-2">Press Enter to send, Ctrl+Enter for line break</p>
+              <p className="text-xs text-muted-foreground mt-2">{t.pressEnterToSend}, {t.pressCtrlEnterNewLine}</p>
             </form>
           </TooltipProvider>
 
@@ -314,7 +316,7 @@ export default function Chat({ conversations = [] }: Props) {
                       type="button"
                       onClick={() => removeImage(i)}
                       className="absolute top-0 right-0 bg-black/70 rounded-full p-0.5"
-                      title="Remove image"
+                      title={t.removeImage}
                     >
                       <X className="h-3 w-3 text-white" />
                     </button>
@@ -331,7 +333,7 @@ export default function Chat({ conversations = [] }: Props) {
                       <div className="flex items-center justify-between bg-muted/50 px-2 py-1 border-b border-border">
                         <div className="flex items-center flex-1 gap-1">
                           <Code className="h-3 w-3 text-primary" />
-                          <span className="text-xs font-medium truncate">code-snippet-{index + 1}</span>
+                          <span className="text-xs font-medium truncate">{t.codeSnippet}-{index + 1}</span>
                         </div>
                         <button
                           type="button"
@@ -342,7 +344,7 @@ export default function Chat({ conversations = [] }: Props) {
                             }
                           }}
                           className="text-xs text-muted-foreground hover:text-foreground ml-1"
-                          title="Remove code snippet"
+                          title={t.remove}
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -365,78 +367,75 @@ export default function Chat({ conversations = [] }: Props) {
           {/* Content Sections */}
           <div className="prose dark:prose-invert max-w-none space-y-8">
             <section>
-              <h2 className="text-lg font-semibold mb-4">Getting Started</h2>
+              <h2 className="text-lg font-semibold mb-4">{t.gettingStarted}</h2>
               <p className="text-muted-foreground">
-                Welcome to VisionAI! Here are some tips to help you get started:
+                {t.welcome}
               </p>
               <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
-                <li>Type your question in the input area above</li>
-                <li>Upload images to extract text or analyze content</li>
-                <li>Paste code snippets for analysis or debugging</li>
-                <li>Use Ctrl+Enter for line breaks in your messages</li>
-                <li>Press Enter to send your message</li>
+                <li>{t.askQuestion}</li>
+                <li>{t.imageAnalysis}</li>
+                <li>{t.codeSupport}</li>
+                <li>{t.pressCtrlEnterNewLine}</li>
+                <li>{t.pressEnterToSend}</li>
               </ul>
             </section>
 
             <section>
-              <h2 className="text-lg font-semibold mb-4">Latest Updates</h2>
+              <h2 className="text-lg font-semibold mb-4">{t.tips}</h2>
               <div className="space-y-4">
                 <div className="border rounded-lg p-4 bg-card">
-                  <h3 className="font-medium mb-2">Enhanced Image Analysis</h3>
+                  <h3 className="font-medium mb-2">{t.imageAnalysis}</h3>
                   <p className="text-sm text-muted-foreground">
-                    We've improved our image analysis capabilities. You can now upload images in JPEG, PNG, GIF, WebP, and SVG formats with a maximum size of 5MB.
+                    {t.supportedFormats}
                   </p>
                 </div>
                 <div className="border rounded-lg p-4 bg-card">
-                  <h3 className="font-medium mb-2">Code Snippet Support</h3>
+                  <h3 className="font-medium mb-2">{t.codeSupport}</h3>
                   <p className="text-sm text-muted-foreground">
-                    New feature: Paste code snippets directly into the chat. The system will automatically detect and format your code for better readability.
+                    {t.maxImages}
                   </p>
                 </div>
               </div>
             </section>
 
             <section>
-              <h2 className="text-lg font-semibold mb-4">Tips & Tricks</h2>
+              <h2 className="text-lg font-semibold mb-4">{t.imageUploadTips}</h2>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="border rounded-lg p-4 bg-card">
-                  <h3 className="font-medium mb-2">Image Upload Tips</h3>
+                  <h3 className="font-medium mb-2">{t.uploadImage}</h3>
                   <ul className="text-sm text-muted-foreground space-y-1">
-                    <li>• Clear, well-lit images work best</li>
-                    <li>• Text should be clearly visible</li>
-                    <li>• Maximum 3 images per message</li>
-                    <li>• Supported formats: JPEG, PNG, GIF, WebP, SVG</li>
+                    <li>• {t.imageAnalysis}</li>
+                    <li>• {t.textExtracted}</li>
+                    <li>• {t.maxImages}</li>
+                    <li>• {t.supportedFormats}</li>
                   </ul>
                 </div>
                 <div className="border rounded-lg p-4 bg-card">
-                  <h3 className="font-medium mb-2">Code Snippet Tips</h3>
+                  <h3 className="font-medium mb-2">{t.codeSnippet}</h3>
                   <ul className="text-sm text-muted-foreground space-y-1">
-                    <li>• Paste code directly into the chat</li>
-                    <li>• System auto-detects code format</li>
-                    <li>• Preview code before sending</li>
-                    <li>• Remove snippets if needed</li>
+                    <li>• {t.codeSupport}</li>
+                    <li>• {t.preview}</li>
+                    <li>• {t.remove}</li>
                   </ul>
                 </div>
               </div>
             </section>
 
             <section>
-              <h2 className="text-lg font-semibold mb-4">Keyboard Shortcuts</h2>
+              <h2 className="text-lg font-semibold mb-4">{t.keyboardShortcuts}</h2>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="border rounded-lg p-4 bg-card">
-                  <h3 className="font-medium mb-2">Message Controls</h3>
+                  <h3 className="font-medium mb-2">{t.send}</h3>
                   <ul className="text-sm text-muted-foreground space-y-1">
-                    <li>• Enter: Send message</li>
-                    <li>• Ctrl + Enter: New line</li>
-                    <li>• Shift + Enter: New line</li>
+                    <li>• {t.pressEnterToSend}</li>
+                    <li>• {t.pressCtrlEnterNewLine}</li>
                   </ul>
                 </div>
                 <div className="border rounded-lg p-4 bg-card">
-                  <h3 className="font-medium mb-2">File Controls</h3>
+                  <h3 className="font-medium mb-2">{t.attachFile}</h3>
                   <ul className="text-sm text-muted-foreground space-y-1">
-                    <li>• Click paperclip to upload</li>
-                    <li>• Drag & drop images</li>
-                    <li>• Click X to remove files</li>
+                    <li>• {t.uploadImage}</li>
+                    <li>• {t.removeImage}</li>
                   </ul>
                 </div>
               </div>

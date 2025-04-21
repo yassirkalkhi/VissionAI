@@ -1,6 +1,9 @@
 import { Speech } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export default function AppLogo() {
+    const { t } = useLanguage();
+    
     return (
         <div className="flex items-center">
             <div className="h-8 w-8 rounded-md bg-linear-150 from-[#00bba2] to-pink-300 text-primary-foreground flex items-center justify-center text-xs font-medium">

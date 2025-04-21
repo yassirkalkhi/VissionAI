@@ -26,9 +26,17 @@ class ImageUploadController extends Controller
             if ($request->hasFile('images')) {
                 foreach ($request->file('images') as $image) {
                     $path = $image->store('chat-images', 'public');
+                    
+                    $appUrl = config('app.url');
+                    
+                    // Check if port 8000 is already in the URL
+                    if (strpos($appUrl, ':8000') === false) {
+                        $appUrl = rtrim($appUrl, '/') . ':8000';
+                    }
+                    
                     $uploadedImages[] = [
                         'path' => $path,
-                        'url' => Storage::url($path),
+                        'url' => $appUrl . '/storage/' . $path,
                         'name' => $image->getClientOriginalName(),
                         'contentType' => $image->getMimeType(),
                     ];

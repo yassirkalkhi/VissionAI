@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->string('title')->nullable();
+            $table->boolean('is_public')->default(false);
             $table->timestamps();
             $table->softDeletes();
         });
@@ -26,7 +27,6 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('conversations');
-        $table->dropSoftDeletes();
     }
  
 };

@@ -1,4 +1,4 @@
-import { useState, useCallback, memo } from "react"
+import { useState, useCallback, memo, useMemo, useEffect } from "react"
 import { Head, Link } from "@inertiajs/react"
 import { router } from "@inertiajs/react"
 import AppSidebarLayout from "@/layouts/app/app-sidebar-layout"
@@ -18,6 +18,8 @@ import {
   List,
   Grid,
   GraduationCap,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react"
 import {
   AlertDialog,
@@ -41,6 +43,16 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Conversation, Question, Quiz } from "@/types"
 import { toast } from 'react-hot-toast'
+import { useLanguage } from '@/contexts/LanguageContext'
+import { 
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious
+} from "@/components/ui/pagination"
 
 interface Props {
   quizzes: Quiz[]
@@ -52,35 +64,39 @@ const EditQuizForm = memo(({
   title, 
   description, 
   onTitleChange, 
-  onDescriptionChange 
+  onDescriptionChange,
+  t,
+  isRTL
 }: { 
   title: string
   description: string
   onTitleChange: (value: string) => void
   onDescriptionChange: (value: string) => void
+  t: any
+  isRTL?: boolean
 }) => (
   <div className="grid gap-4 py-4">
-    <div className="grid grid-cols-4 items-center gap-4">
-      <Label htmlFor="edit-title" className="text-right">
-        Title
+    <div className={`grid grid-cols-4 items-center gap-4 ${isRTL ? 'text-right' : ''}`}>
+      <Label htmlFor="edit-title" className={`${isRTL ? 'text-right col-start-4 col-end-5' : 'text-right'}`}>
+        {t.title}
       </Label>
       <Input
         id="edit-title"
         value={title}
         onChange={(e) => onTitleChange(e.target.value)}
-        className="col-span-3"
+        className={`${isRTL ? 'col-start-1 col-end-4 text-right' : 'col-span-3'}`}
       />
     </div>
-    <div className="grid grid-cols-4 items-center gap-4">
-      <Label htmlFor="edit-description" className="text-right">
-        Description
+    <div className={`grid grid-cols-4 items-center gap-4 ${isRTL ? 'text-right' : ''}`}>
+      <Label htmlFor="edit-description" className={`${isRTL ? 'text-right col-start-4 col-end-5' : 'text-right'}`}>
+        {t.description}
       </Label>
       <Textarea
         id="edit-description"
         value={description}
         maxLength={225}
         onChange={(e) => onDescriptionChange(e.target.value)}
-        className="col-span-3 resize-none"
+        className={`${isRTL ? 'col-start-1 col-end-4 text-right' : 'col-span-3'} resize-none`}
       />
     </div>
   </div>
@@ -89,6 +105,7 @@ const EditQuizForm = memo(({
 EditQuizForm.displayName = 'EditQuizForm'
 
 export default function Quizzes({ quizzes, questions, conversations }: Props) {
+  const { t, language } = useLanguage()
   const [searchQuery, setSearchQuery] = useState("")
   const [difficultyFilter, setDifficultyFilter] = useState("all")
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid")
@@ -98,6 +115,10 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
   const [editDescription, setEditDescription] = useState("")
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [quizToEdit, setQuizToEdit] = useState<Quiz | null>(null)
+  const isRTL = language === 'ar'
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage, setItemsPerPage] = useState(9) // Default for grid view
+  const [totalPages, setTotalPages] = useState(1)
 
   const questionsByQuiz = questions.reduce(
     (acc, question) => {
@@ -124,11 +145,114 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
     attempts: quiz.attempts || []
   }))
 
-  const filteredQuizzes = quizzesWithCount.filter((quiz) => {
-    const matchesSearch = quiz.title.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesDifficulty = difficultyFilter === "all" || quiz.difficulty === difficultyFilter
-    return matchesSearch && matchesDifficulty
-  })
+  const filteredQuizzes = useMemo(() => {
+    return quizzesWithCount.filter((quiz) => {
+      const matchesSearch = quiz.title.toLowerCase().includes(searchQuery.toLowerCase())
+      const matchesDifficulty = difficultyFilter === "all" || quiz.difficulty === difficultyFilter
+      return matchesSearch && matchesDifficulty
+    })
+  }, [quizzesWithCount, searchQuery, difficultyFilter])
+
+  useEffect(() => {
+    const newTotalPages = Math.max(1, Math.ceil(filteredQuizzes.length / itemsPerPage))
+    setTotalPages(newTotalPages)
+    
+    // Reset to page 1 if current page becomes invalid
+    if (currentPage > newTotalPages && newTotalPages > 0) {
+      setCurrentPage(1)
+    }
+  }, [filteredQuizzes, itemsPerPage])
+
+  const paginatedQuizzes = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    
+    return filteredQuizzes.slice(startIndex, endIndex)
+  }, [filteredQuizzes, currentPage, itemsPerPage])
+
+  useEffect(() => {
+    setItemsPerPage(viewMode === "grid" ? 9 : 10) // More items in list view
+  }, [viewMode])
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page)
+      // Scroll to top of the quiz list
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+  }
+
+  const renderPaginationItems = () => {
+    const items = []
+    const maxVisiblePages = 5 // Show max 5 page numbers
+    
+    // Always show first page
+    items.push(
+      <PaginationItem key="page-1">
+        <PaginationLink 
+          isActive={currentPage === 1}
+          onClick={() => handlePageChange(1)}
+        >
+          1
+        </PaginationLink>
+      </PaginationItem>
+    )
+    
+    // Calculate start and end pages to show
+    let startPage = Math.max(2, currentPage - Math.floor(maxVisiblePages / 2))
+    let endPage = Math.min(totalPages - 1, startPage + maxVisiblePages - 3)
+    
+    // Adjust if we're near the end
+    if (endPage <= startPage) endPage = startPage
+    
+    // Show ellipsis after page 1 if needed
+    if (startPage > 2) {
+      items.push(
+        <PaginationItem key="ellipsis-1">
+          <PaginationEllipsis />
+        </PaginationItem>
+      )
+    }
+    
+    // Add middle pages
+    for (let i = startPage; i <= endPage; i++) {
+      items.push(
+        <PaginationItem key={`page-${i}`}>
+          <PaginationLink 
+            isActive={currentPage === i}
+            onClick={() => handlePageChange(i)}
+          >
+            {i}
+          </PaginationLink>
+        </PaginationItem>
+      )
+    }
+    
+    // Show ellipsis before last page if needed
+    if (endPage < totalPages - 1) {
+      items.push(
+        <PaginationItem key="ellipsis-2">
+          <PaginationEllipsis />
+        </PaginationItem>
+      )
+    }
+    
+    // Always show last page if more than 1 page
+    if (totalPages > 1) {
+      items.push(
+        <PaginationItem key={`page-${totalPages}`}>
+          <PaginationLink 
+            isActive={currentPage === totalPages}
+            onClick={() => handlePageChange(totalPages)}
+          >
+            {totalPages}
+          </PaginationLink>
+        </PaginationItem>
+      )
+    }
+    
+    return items
+  }
 
   const handleStartQuiz = (quiz: Quiz) => {
     router.visit(route('quizzes.take', quiz.id))
@@ -188,9 +312,9 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
   }
 
   const formatTimeLimit = (seconds: number | null) => {
-    if (!seconds) return "No limit"
+    if (!seconds) return t.noLimit
     const minutes = Math.floor(seconds / 60)
-    return `${minutes} min`
+    return `${minutes} ${t.minutes}`
   }
 
   const getDifficultyIcon = (difficulty?: string) => {
@@ -219,63 +343,62 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
     } 
   }
 
+  const getDifficultyTranslated = (difficulty?: string) => {
+    switch (difficulty) {
+      case "easy":
+        return t.easy
+      case "medium":
+        return t.medium
+      case "hard":
+        return t.hard
+      default:
+        return difficulty
+    }
+  }
+
   const handleTakeQuiz = async (quizId: number) => {
     try {
       router.visit(route('quizzes.take', quizId))
     } catch (error) {
-      toast.error('Failed to start quiz. Please try again.')
+      toast.error(t.tryAgain)
     }
   }
 
   const breadcrumbs = [
     { title: "VisionAI", href: "/chat" },
-    { title: "Quizzes", href: "/quizzes" },
+    { title: t.quizzes, href: "/quizzes" },
   ]
 
   return (
-    <AppSidebarLayout breadcrumbs={breadcrumbs} conversations={conversations}>
-      <Head title="Quizzes" />
+    <AppSidebarLayout breadcrumbs={breadcrumbs} >
+      <Head title={t.quizzes} />
 
-      <div className="container mx-auto p-6">
+      <div className={`container mx-auto p-6 ${isRTL ? 'rtl-layout' : ''}`} style={isRTL ? {direction: 'rtl'} : {}}>
         <div className="flex flex-col gap-6">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-              <h1 className="text-2xl font-bold">Your Quizzes</h1>
-              <p className="text-muted-foreground">Manage and take your quizzes</p>
+          <div className={`flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${isRTL ? '' : ''}`}>
+            <div className={isRTL ? 'text-right w-full' : ''}>
+              <h1 className="text-2xl font-bold">{t.yourQuizzes}</h1>
+              <p className="text-muted-foreground">{t.manageQuizzes}</p>
             </div>
             <div className="flex gap-2">
-              <Button onClick={handleCreateQuiz} className="gap-2">
+              <Button onClick={handleCreateQuiz} className={`gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <Plus className="h-4 w-4" />
-                Create Quiz
+                {t.createQuiz}
               </Button>
             </div>
           </div>
 
-          <div className="flex flex-col md:flex-row gap-4">
+          <div className={`flex flex-col md:flex-row gap-4 ${isRTL ? 'md:flex-row-reverse' : ''}`}>
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground`} />
               <Input
-                placeholder="Search quizzes..."
+                placeholder={`${t.search} ${t.quizzes.toLowerCase()}...`}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
+                className={isRTL ? 'pr-10 text-right' : 'pl-10'}
               />
             </div>
-            <div className="flex gap-2">
-              <Select value={difficultyFilter} onValueChange={setDifficultyFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <div className="flex items-center gap-2">
-                    <Filter className="h-4 w-4" />
-                    <SelectValue placeholder="Filter by difficulty" />
-                  </div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Difficulties</SelectItem>
-                  <SelectItem value="easy">Easy</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="hard">Hard</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
               <div className="flex border rounded-md">
                 <Button
                   variant="ghost"
@@ -294,15 +417,29 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
                   <List className="h-4 w-4" />
                 </Button>
               </div>
+              <Select value={difficultyFilter} onValueChange={setDifficultyFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <div className={`flex items-center gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
+                    <Filter className="h-4 w-4" />
+                    <SelectValue placeholder={`${t.filterBy} ${t.difficulty.toLowerCase()}`} />
+                  </div>
+                </SelectTrigger>
+                <SelectContent className={isRTL ? 'text-right' : ''}>
+                  <SelectItem value="all">{t.allDifficulties}</SelectItem>
+                  <SelectItem value="easy">{t.easy}</SelectItem>
+                  <SelectItem value="medium">{t.medium}</SelectItem>
+                  <SelectItem value="hard">{t.hard}</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
           {viewMode === "grid" ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredQuizzes.map((quiz) => (
-                <Card key={quiz.id} className="flex flex-col">
+              {paginatedQuizzes.map((quiz) => (
+                <Card key={quiz.id} className={`flex flex-col ${isRTL ? 'text-right' : ''}`}>
                   <CardHeader>
-                    <CardTitle className="flex items-center justify-between">
+                    <CardTitle className={`flex items-center justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
                       <span>{quiz.title}</span>
                       <Button
                         variant="ghost"
@@ -313,17 +450,17 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
                         <Edit className="h-4 w-4" />
                       </Button>
                     </CardTitle>
-                    <CardDescription>{quiz.description}</CardDescription>
+                    <CardDescription className={isRTL ? 'text-right' : ''}>{quiz.description}</CardDescription>
                   </CardHeader>
                   <CardContent className="flex-grow">
                     <div className="space-y-4">
-                      <div className="flex items-center gap-2 text-sm">
+                      <div className={`flex items-center gap-2 text-sm ${isRTL ? 'flex-row-reverse justify-end' : ''}`}>
                         <FileText className="h-4 w-4" />
-                        <span>{quiz.questions_count} questions</span>
+                        <span>{quiz.questions_count} {t.questionCount.toLowerCase()}</span>
                       </div>
-                      <div className="flex items-center gap-2 text-sm">
+                      <div className={`flex items-center gap-2 text-sm ${isRTL ? 'flex-row-reverse justify-end' : ''}`}>
                         {getDifficultyIcon(quiz.difficulty)}
-                        <span className="capitalize">{quiz.difficulty} difficulty</span>
+                        <span className="capitalize">{getDifficultyTranslated(quiz.difficulty)} {t.difficulty.toLowerCase()}</span>
                       </div>
                     </div>
                   </CardContent>
@@ -333,10 +470,10 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
                         variant="outline"
                         size="sm"
                         onClick={() => handleStartQuiz(quiz)}
-                        className="w-full"
+                        className={`w-full ${isRTL ? 'flex-row-reverse' : ''}`}
                       >
-                        <Play className="h-4 w-4 mr-1" />
-                        Take Quiz
+                        <Play className={`h-4 w-4 ${isRTL ? 'ml-1' : 'mr-1'}`} />
+                        {t.startQuiz}
                       </Button>
                       <Button
                         variant="outline"
@@ -344,9 +481,9 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
                         asChild
                         className="w-full"
                       >
-                        <Link href={`/quizzes/${quiz.id}/submissions`}>
-                          <FileText className="h-4 w-4 mr-1" />
-                          Submissions
+                        <Link href={`/quizzes/${quiz.id}/submissions`} className={isRTL ? 'flex flex-row-reverse items-center justify-center' : ''}>
+                          <FileText className={`h-4 w-4 ${isRTL ? 'ml-1' : 'mr-1'}`} />
+                          {t.submissions}
                         </Link>
                       </Button>
                     </div>
@@ -356,33 +493,33 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
             </div>
           ) : (
             <div className="rounded-md border">
-              <div className="grid grid-cols-12 gap-4 p-4 font-medium border-b">
-                <div className="col-span-5">Title</div>
-                <div className="col-span-2 text-center">Questions</div>
-                <div className="col-span-2 text-center">Time Limit</div>
-                <div className="col-span-2 text-right">Actions</div>
+              <div className={`grid grid-cols-12 gap-4 p-4 font-medium border-b ${isRTL ? 'text-right dir-rtl' : ''}`}>
+                <div className={`col-span-5 ${isRTL ? 'order-1' : ''}`}>{t.title}</div>
+                <div className={`col-span-2 text-center ${isRTL ? 'order-2' : ''}`}>{t.questionCount}</div>
+                <div className={`col-span-2 text-center ${isRTL ? 'order-3' : ''}`}>{t.timeLimit}</div>
+                <div className={`col-span-2 ${isRTL ? 'text-left order-4' : 'text-right'}`}>{t.actions}</div>
               </div>
-              {filteredQuizzes.map((quiz) => (
+              {paginatedQuizzes.map((quiz) => (
                 <div
                   key={quiz.id}
-                  className="grid grid-cols-12 gap-4 p-4 border-b hover:bg-muted/50"
+                  className={`grid grid-cols-12 gap-4 p-4 border-b hover:bg-muted/50 ${isRTL ? 'text-right dir-rtl' : ''}`}
                 >
-                  <div className="col-span-5 font-medium flex items-center gap-2">
+                  <div className={`col-span-5 font-medium flex items-center gap-2 ${isRTL ? 'flex-row-reverse justify-end order-1' : ''}`}>
                     {getDifficultyIcon(quiz.difficulty)}
                     {quiz.title}
                   </div>
-                  <div className="col-span-2 text-center">{quiz.questions_count}</div>
-                  <div className="col-span-2 text-center">{formatTimeLimit(quiz.settings?.time_limit)}</div>
-                  <div className="col-span-2 flex justify-end gap-2">
+                  <div className={`col-span-2 text-center ${isRTL ? 'order-2' : ''}`}>{quiz.questions_count}</div>
+                  <div className={`col-span-2 text-center ${isRTL ? 'order-3' : ''}`}>{formatTimeLimit(quiz.settings?.time_limit)}</div>
+                  <div className={`col-span-2 flex ${isRTL ? 'justify-start order-4' : 'justify-end'} gap-2`}>
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => handleEditQuiz(quiz)}
-                        className="gap-2 ml-auto"
+                        className={`gap-2 ${isRTL ? 'mr-auto' : 'ml-auto'}`}
                       >
                         <Edit className="h-3 w-3" />
-                        Edit
+                        {t.edit}
                       </Button>
                     </div>
                   </div>
@@ -393,21 +530,20 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
 
           {/* Delete Quiz Confirmation Dialog */}
           <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-            <AlertDialogContent>
+            <AlertDialogContent className={isRTL ? 'rtl' : ''}>
               <AlertDialogHeader>
-                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will permanently delete the quiz "{quizToDelete?.title}" and all its questions. This action cannot be
-                  undone.
+                <AlertDialogTitle className={isRTL ? 'text-right' : ''}>{t.deleteQuiz}</AlertDialogTitle>
+                <AlertDialogDescription className={isRTL ? 'text-right' : ''}>
+                  {t.confirmDelete}
                 </AlertDialogDescription>
               </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogFooter className={isRTL ? 'flex-row-reverse' : ''}>
+                <AlertDialogCancel>{t.cancel}</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={confirmDeleteQuiz}
                   className="bg-destructive text-white dark:text-white hover:bg-destructive/90"
                 >
-                  Delete Quiz
+                  {t.delete}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -415,18 +551,20 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
 
           {/* Edit Quiz Dialog */}
           <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-            <DialogContent>
+            <DialogContent className={isRTL ? 'rtl' : ''}>
               <DialogHeader>
-                <DialogTitle>Edit Quiz</DialogTitle>
-                <DialogDescription>Make changes to your quiz settings here.</DialogDescription>
+                <DialogTitle className={isRTL ? 'text-right' : ''}>{t.editQuiz}</DialogTitle>
+                <DialogDescription className={isRTL ? 'text-right' : ''}>{t.editQuizDescription}</DialogDescription>
               </DialogHeader>
               <EditQuizForm 
                 title={editTitle}
                 description={editDescription}
                 onTitleChange={handleTitleChange}
                 onDescriptionChange={handleDescriptionChange}
+                t={t}
+                isRTL={isRTL}
               />
-              <DialogFooter className="flex justify-between">
+              <DialogFooter className={`flex justify-between ${isRTL ? 'flex-row-reverse' : ''}`}>
                 <Button 
                   variant="outline" 
                   className="border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive"
@@ -437,18 +575,58 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
                     }
                   }}
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Quiz
+                  <Trash2 className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                  {t.deleteQuiz}
                 </Button>
-                <div className="flex gap-2">
+                <div className={`flex gap-2 ${isRTL ? 'flex-row-reverse' : ''}`}>
                   <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
-                    Cancel
+                    {t.cancel}
                   </Button>
-                  <Button onClick={handleUpdateQuiz}>Save Changes</Button>
+                  <Button onClick={handleUpdateQuiz}>{t.save}</Button>
                 </div>
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          {/* Add pagination at the bottom */}
+          {filteredQuizzes.length > 0 && (
+            <div className="mt-6">
+              <Pagination>
+                <PaginationContent className={isRTL ? 'flex-row-reverse' : ''}>
+                  <PaginationItem>
+                    <PaginationPrevious 
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      className={`cursor-pointer ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      aria-disabled={currentPage === 1}
+                    />
+                  </PaginationItem>
+                  
+                  {renderPaginationItems()}
+                  
+                  <PaginationItem>
+                    <PaginationNext 
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      className={`cursor-pointer ${currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      aria-disabled={currentPage === totalPages}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+              
+              <div className="text-center text-sm text-muted-foreground mt-2">
+                {t.showing} {(currentPage - 1) * itemsPerPage + 1}-
+                {Math.min(currentPage * itemsPerPage, filteredQuizzes.length)} {t.of} {filteredQuizzes.length} {t.quizzes.toLowerCase()}
+              </div>
+            </div>
+          )}
+
+          {filteredQuizzes.length === 0 && (
+            <div className="text-center p-12 border rounded-lg bg-muted/10">
+              <FileText className="h-12 w-12 mx-auto text-muted-foreground opacity-30 mb-4" />
+              <h3 className="text-lg font-medium mb-2">{t.noQuizzesFound}</h3>
+              <p className="text-muted-foreground">{t.tryDifferentSearch}</p>
+            </div>
+          )}
         </div>
       </div>
     </AppSidebarLayout>

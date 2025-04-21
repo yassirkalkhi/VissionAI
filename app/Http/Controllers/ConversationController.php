@@ -53,6 +53,14 @@ class ConversationController extends Controller
             'messages' => $messages,
         ]);
     }
+    public function list()
+    {
+        $conversations = Conversation::where('user_id', auth()->id())
+            ->orderBy('updated_at', 'desc')
+            ->get();
+        return response()->json($conversations);
+    }
+
 
     /**
      * Create a new conversation
@@ -131,32 +139,41 @@ class ConversationController extends Controller
     }
 
     /**
-     * Update a conversation's title
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
+     * Update the specified resource in storage.
      */
     public function update(Request $request, $id)
     {
-        $conversation = Conversation::findOrFail($id);
-        
-        if ($conversation->user_id !== Auth::id()) {
-            abort(403, 'Unauthorized action.');
-        }
-        
-        $validated = $request->validate([
-            'title' => 'required|string|max:255',
+        // Log incoming data for debugging
+        \Log::info('Updating conversation', [
+            'id' => $id,
+            'request' => $request->all()
         ]);
         
-        $conversation->update([
-            'title' => $validated['title'],
+        $conversation = Conversation::findOrFail($id);
+        
+        // Check ownership of conversation
+        if ($conversation->user_id !== Auth::id()) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+        
+        // Validate request data
+        $validated = $request->validate([
+            'title' => 'sometimes|string|max:255',
+            'is_public' => 'sometimes|boolean',
+        ]);
+        
+        // Update conversation
+        $conversation->update($validated);
+        
+        \Log::info('Conversation updated', [
+            'id' => $id,
+            'conversation' => $conversation->toArray()
         ]);
         
         return response()->json([
-            'success' => true,
-            'conversation' => $conversation,
-        ],200);
+            'success' => true, 
+            'conversation' => $conversation
+        ]);
     }
 
     /**
