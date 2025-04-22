@@ -10,7 +10,7 @@ Route::get('login', function (AuthKitLoginRequest $request) {
 })->middleware(['guest'])->name('login');
 
 Route::get('authenticate', function (AuthKitAuthenticationRequest $request) {
-    return tap(route('home'), fn () => $request->authenticate());
+    return tap(to_route('chat.index'), fn () => $request->authenticate());
 })->middleware(['guest']);
 
 Route::post('logout', function (AuthKitLogoutRequest $request) {

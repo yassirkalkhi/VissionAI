@@ -163,6 +163,17 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
     }
   }, [filteredQuizzes, itemsPerPage])
 
+  useEffect(() => {
+    // Recalculate total pages whenever filtered quizzes or items per page change
+    const newTotalPages = Math.max(1, Math.ceil(filteredQuizzes.length / itemsPerPage));
+    setTotalPages(newTotalPages);
+
+    // Reset to page 1 if the current page exceeds the new total pages
+    if (currentPage > newTotalPages) {
+      setCurrentPage(1);
+    }
+  }, [filteredQuizzes, itemsPerPage]);
+
   const paginatedQuizzes = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage
     const endIndex = startIndex + itemsPerPage
@@ -175,84 +186,88 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
   }, [viewMode])
 
   const handlePageChange = (page: number) => {
+    // Ensure the page is within valid bounds
     if (page >= 1 && page <= totalPages) {
-      setCurrentPage(page)
-      // Scroll to top of the quiz list
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      setCurrentPage(page);
+
+      // Scroll to the top of the quiz list for better UX
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }
+  };
 
   const renderPaginationItems = () => {
-    const items = []
-    const maxVisiblePages = 5 // Show max 5 page numbers
-    
-    // Always show first page
+    const items = [];
+    const maxVisiblePages = 5; // Maximum number of visible page links
+
+    // Always show the first page
     items.push(
       <PaginationItem key="page-1">
-        <PaginationLink 
+        <PaginationLink
           isActive={currentPage === 1}
           onClick={() => handlePageChange(1)}
         >
           1
         </PaginationLink>
       </PaginationItem>
-    )
-    
-    // Calculate start and end pages to show
-    let startPage = Math.max(2, currentPage - Math.floor(maxVisiblePages / 2))
-    let endPage = Math.min(totalPages - 1, startPage + maxVisiblePages - 3)
-    
-    // Adjust if we're near the end
-    if (endPage <= startPage) endPage = startPage
-    
-    // Show ellipsis after page 1 if needed
+    );
+
+    // Calculate the range of pages to display
+    let startPage = Math.max(2, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages - 1, startPage + maxVisiblePages - 2);
+
+    // Adjust the range if near the end
+    if (endPage - startPage < maxVisiblePages - 2) {
+      startPage = Math.max(2, endPage - (maxVisiblePages - 2));
+    }
+
+    // Add ellipsis if there are hidden pages before the start
     if (startPage > 2) {
       items.push(
-        <PaginationItem key="ellipsis-1">
+        <PaginationItem key="ellipsis-start">
           <PaginationEllipsis />
         </PaginationItem>
-      )
+      );
     }
-    
-    // Add middle pages
+
+    // Add the range of pages
     for (let i = startPage; i <= endPage; i++) {
       items.push(
         <PaginationItem key={`page-${i}`}>
-          <PaginationLink 
+          <PaginationLink
             isActive={currentPage === i}
             onClick={() => handlePageChange(i)}
           >
             {i}
           </PaginationLink>
         </PaginationItem>
-      )
+      );
     }
-    
-    // Show ellipsis before last page if needed
+
+    // Add ellipsis if there are hidden pages after the end
     if (endPage < totalPages - 1) {
       items.push(
-        <PaginationItem key="ellipsis-2">
+        <PaginationItem key="ellipsis-end">
           <PaginationEllipsis />
         </PaginationItem>
-      )
+      );
     }
-    
-    // Always show last page if more than 1 page
+
+    // Always show the last page if there are multiple pages
     if (totalPages > 1) {
       items.push(
         <PaginationItem key={`page-${totalPages}`}>
-          <PaginationLink 
+          <PaginationLink
             isActive={currentPage === totalPages}
             onClick={() => handlePageChange(totalPages)}
           >
             {totalPages}
           </PaginationLink>
         </PaginationItem>
-      )
+      );
     }
-    
-    return items
-  }
+
+    return items;
+  };
 
   const handleStartQuiz = (quiz: Quiz) => {
     router.visit(route('quizzes.take', quiz.id))
@@ -598,7 +613,9 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
                       onClick={() => handlePageChange(currentPage - 1)}
                       className={`cursor-pointer ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
                       aria-disabled={currentPage === 1}
-                    />
+                    >
+                      {t.previous} {/* Use the translated word for "Previous" */}
+                    </PaginationPrevious>
                   </PaginationItem>
                   
                   {renderPaginationItems()}
@@ -608,7 +625,10 @@ export default function Quizzes({ quizzes, questions, conversations }: Props) {
                       onClick={() => handlePageChange(currentPage + 1)}
                       className={`cursor-pointer ${currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}`}
                       aria-disabled={currentPage === totalPages}
-                    />
+                      content="d"
+                    >
+                      {t.next} {/* Use the translated word for "Next" */}
+                    </PaginationNext>
                   </PaginationItem>
                 </PaginationContent>
               </Pagination>

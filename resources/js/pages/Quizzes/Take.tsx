@@ -47,12 +47,18 @@ export default function Take({ quiz, conversations }: Props) {
     const startTimeRef = useRef<number>(Date.now());
     const endTimeRef = useRef<number | null>(null);
     const [timeTaken, setTimeTaken] = useState<number>(0);
+    let { t } = useLanguage();
 
     const form = useForm<FormData>({
         answers: {},
         score: 0,
         time_taken: 0
     });
+    if (!quiz || !quiz.id || !quiz.title || !quiz.questions || quiz.questions.length === 0) {
+        toast.error(t.unsupportedFormat);
+        router.visit(route('quizzes.index'));
+        return null;
+    }
 
     useEffect(() => {
         form.setData('answers', selectedAnswers);
@@ -139,7 +145,7 @@ export default function Take({ quiz, conversations }: Props) {
         return Math.round((correctAnswers / quiz.questions.length) * 100);
     };
 
-    const t = translations[quiz.settings?.language || 'en'];
+     t = translations[quiz.settings?.language || 'en'];
 
     const handleTimeEnd = () => {
         if (timerRef.current) {

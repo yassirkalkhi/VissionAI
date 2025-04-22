@@ -16,6 +16,7 @@
         "laravel/tinker": "^2.10.1",
         "laravel/workos": "^0.1.0",
         "openai-php/client": "^0.10.3",
+        "thiagoalessio/tesseract_ocr": "^2.13",
         "tightenco/ziggy": "^2.4"
     },
     "require-dev": {

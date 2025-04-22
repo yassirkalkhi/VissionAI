@@ -12,6 +12,11 @@ const sidebarNavItems: NavItem[] = [
         href: '/settings/profile',
         icon: null,
     },
+    {
+        title: 'API',
+        href: '/settings/api',
+        icon: null,
+    },
 ];
 
 export default function SettingsLayout({ children }: PropsWithChildren) {
