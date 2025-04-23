@@ -227,7 +227,7 @@ class QuizzesController extends Controller
                 - IMPORTANT: The text is extracted from multiple documents. Each document is clearly marked with '--- Document X: filename ---'
                 - IMPORTANT: Detect the language of the provided text and generate the quiz in the same language
                 - For RTL languages (like Arabic), set layout to 'rtl', otherwise set it to 'ltr'
-                - Set the language code based on the detected language (en, ar, fr, es, de, zh, ja, ru)
+                - Set the language code based on the detected language  'language': 'en' | 'ar' | 'fr' | 'de' | 'it' | 'zh',
                 - Return the response in this exact format:
                 {
                     'quiz': {
@@ -235,7 +235,7 @@ class QuizzesController extends Controller
                         'description': 'Quiz Description in detected language',
                         'difficulty': '{$request->difficulty}',
                         'layout': 'rtl' or 'ltr',
-                        'language': 'language_code',
+                         'language': 'en' | 'ar' | 'fr' | 'de' | 'it' | 'zh',
                         'questions': [
                             {
                                 'question_text': 'Question text in detected language',

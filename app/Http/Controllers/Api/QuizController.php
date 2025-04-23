@@ -216,7 +216,7 @@ class QuizController extends Controller
                         'description': 'Quiz Description in detected language',
                         'difficulty': '{$validated['difficulty']}',
                         'layout': 'rtl' or 'ltr',
-                        'language': 'language_code',
+                        'language': 'en' | 'ar' | 'fr' | 'de' | 'it' | 'zh',
                         'questions': [
                             {
                                 'question_text': 'Question text in detected language',
