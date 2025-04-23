@@ -17,6 +17,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('key')->unique();
             $table->timestamp('last_used_at')->nullable();
+            $table->boolean('is_active')->default(true)->comment('Indicates if the API key is active or not'); 
             $table->timestamps();
         });
     }

@@ -103,6 +103,15 @@ export interface Translations {
     allDifficulties: string;
     actions: string;
     editQuizDescription: string;
+    timeRemaining: string;
+    submit: string;
+    submitted : string;
+    score: string;
+    finish: string;
+    correct: string;
+    incorrect: string;
+    explanation: string;
+    question : string,
     
     // Additional Quiz Properties needed for Create.tsx
     maxFilesAllowed: string;
@@ -292,6 +301,15 @@ export const translations: Record<Language, Translations> = {
         allDifficulties: 'All Difficulties',
         actions: 'Actions',
         editQuizDescription: 'Make changes to your quiz settings here',
+        timeRemaining: 'Time remaining',
+        submit: 'Submit',
+        submitted : 'Submitted',
+        finish: 'Finish',
+        score: 'Score',
+        correct: 'Correct',
+        incorrect: 'Incorrect',
+        explanation: 'Explanation',
+        question: 'Question',
         
         // Additional Quiz Properties for Create.tsx
         maxFilesAllowed: 'Maximum 5 files allowed',
@@ -479,6 +497,15 @@ export const translations: Record<Language, Translations> = {
         allDifficulties: 'جميع المستويات',
         actions: 'إجراءات',
         editQuizDescription: 'قم بإجراء تغييرات على إعدادات الاختبار هنا',
+        timeRemaining: 'الوقت المتبقي',
+        submit: 'إرسال',
+        finish: 'إنهاء',
+        score: 'الدرجة',
+        submitted : 'تم الإرسال',
+        correct: 'صحيح',
+        incorrect: 'خطأ',
+        explanation: 'شرح',
+        question: 'السؤال',
         
         // Additional Quiz Properties for Create.tsx
         maxFilesAllowed: 'الحد الأقصى 5 ملفات مسموحة',
@@ -666,6 +693,15 @@ export const translations: Record<Language, Translations> = {
         allDifficulties: 'Toutes les difficultés',
         actions: 'Actions',
         editQuizDescription: 'Apportez des modifications aux paramètres de votre quiz ici',
+        timeRemaining: 'Temps restant',
+        submit: 'Soumettre',
+        finish: 'Terminer',
+        score: 'Score',
+        submitted : 'Soumis',
+        correct: 'Correct',
+        incorrect: 'Incorrect',
+        explanation: 'Explication',
+        question: 'Question',
         
         // Additional Quiz Properties for Create.tsx
         maxFilesAllowed: 'Maximum 5 fichiers autorisés',
@@ -853,6 +889,15 @@ export const translations: Record<Language, Translations> = {
         allDifficulties: 'Alle Schwierigkeiten',
         actions: 'Aktionen',
         editQuizDescription: 'Änderungen an den Quiz-Einstellungen hier vornehmen',
+        timeRemaining: 'Verbleibende Zeit',
+        submit: 'Einreichen',
+        finish: 'Beenden',
+        score: 'Punktzahl',
+        submitted : 'Eingereicht',
+        correct: 'Richtig',
+        incorrect: 'Falsch',
+        explanation: 'Erklärung',
+        question: 'Frage',
         
         // Additional Quiz Properties for Create.tsx
         maxFilesAllowed: 'Maximum 5 Dateien erlaubt',
@@ -1040,6 +1085,17 @@ export const translations: Record<Language, Translations> = {
         allDifficulties: 'Tutte le difficoltà',
         actions: 'Azioni',
         editQuizDescription: 'Apporta modifiche ai parametri del quiz qui',
+        timeRemaining: 'Tempo rimanente',
+        submit: 'Invia',
+        finish: 'Termina',  
+        score: 'Punteggio',
+        submitted : 'Inviato',
+        correct: 'Corretto',
+        incorrect: 'Errato',
+        explanation: 'Spiegazione',
+        question: 'Domanda',
+
+
         
         // Additional Quiz Properties for Create.tsx
         maxFilesAllowed: 'Maximum 5 files allowed',
@@ -1227,6 +1283,16 @@ export const translations: Record<Language, Translations> = {
         allDifficulties: '所有难度',
         actions: '操作',
         editQuizDescription: '在这里更改测验设置',
+        timeRemaining: '剩余时间',
+        submit: '提交',
+        finish: '完成',
+        score: '分数',
+        submitted : '已提交',   
+        correct: '正确',
+        incorrect: '错误',
+        explanation: '解释',
+        question: '问题',
+
         
         // Additional Quiz Properties for Create.tsx
         maxFilesAllowed: 'Maximum 5 files allowed',

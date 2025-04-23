@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Head, useForm, router } from '@inertiajs/react';
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Quiz, Question, type Language } from '@/types/index';
-import { translations } from '@/translations/take';
+import { translations } from '@/translations';
+import { Translations } from '@/translations';
 import { toast } from 'react-hot-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,7 +11,6 @@ import { Progress } from '@/components/ui/progress';
 import { Loader2, Clock, ClockIcon, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 import { route } from 'ziggy-js';
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface QuizSettings {
@@ -47,7 +47,9 @@ export default function Take({ quiz, conversations }: Props) {
     const startTimeRef = useRef<number>(Date.now());
     const endTimeRef = useRef<number | null>(null);
     const [timeTaken, setTimeTaken] = useState<number>(0);
-    let { t } = useLanguage();
+
+    const t = translations[quiz.settings?.language || 'en'];
+
 
     const form = useForm<FormData>({
         answers: {},
@@ -145,8 +147,6 @@ export default function Take({ quiz, conversations }: Props) {
         return Math.round((correctAnswers / quiz.questions.length) * 100);
     };
 
-     t = translations[quiz.settings?.language || 'en'];
-
     const handleTimeEnd = () => {
         if (timerRef.current) {
             cancelAnimationFrame(timerRef.current);
@@ -172,7 +172,7 @@ export default function Take({ quiz, conversations }: Props) {
             };
 
             await axios.post(`/quizzes/${quiz.id}/submit`, submitData);
-            toast.success(t.score);
+            toast.success(t.submitted);
             setTimeout(() => {
                 router.visit(route('quizzes.index'));
             }, 2000);

@@ -5,6 +5,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { XCircleIcon } from 'lucide-react';
 import { CheckCircleIcon } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { enUS, ar, fr,de , it ,zhCN } from 'date-fns/locale'; 
+
 
 interface QuizAttempt {
     id: number;
@@ -28,7 +30,17 @@ interface Props {
 }
 
 export default function Submissions({ quiz, attempts, conversations }: Props) {
-    const { t } = useLanguage();
+    const { t ,language} = useLanguage();
+    const getLocale = () => {
+        switch (language) {
+            case 'ar': return ar; // Arabic
+            case 'fr': return fr; // French
+            case 'de': return de; // German (defaulting to English)
+            case 'it': return it; // Italian (defaulting to English)
+            case 'zh': return zhCN; // Chinese (defaulting to English)
+            default: return enUS; // Default to English
+        }
+    };
     
     const formatTime = (seconds: number) => {
         if (seconds < 60) {
@@ -88,7 +100,7 @@ export default function Submissions({ quiz, attempts, conversations }: Props) {
     ];
 
     return (
-        <AppSidebarLayout breadcrumbs={breadcrumbs} conversations={conversations}>
+        <AppSidebarLayout breadcrumbs={breadcrumbs} >
             <Head title={`${quiz.title} - ${t.submissions}`} />
 
             <div className="container mx-auto p-6">
@@ -114,7 +126,7 @@ export default function Submissions({ quiz, attempts, conversations }: Props) {
                                             <CardTitle className="flex items-center justify-between">
                                                 {handleScoreRender(attempt.score)}
                                                 <span className="text-sm text-muted-foreground">
-                                                    {formatDistanceToNow(new Date(attempt.created_at), { addSuffix: true })}
+                                                    {formatDistanceToNow(new Date(attempt.created_at), { addSuffix: true , locale : getLocale()})}
                                                 </span>
                                             </CardTitle>
                                         </CardHeader>

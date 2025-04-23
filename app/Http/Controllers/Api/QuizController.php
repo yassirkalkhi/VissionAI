@@ -128,6 +128,10 @@ class QuizController extends Controller
             return response()->json(['message' => 'Invalid API key'], Response::HTTP_UNAUTHORIZED);
         }
 
+        if(!$apiKeyRecord->is_active) {
+            return response()->json(['message' => 'Forbidden user'],403);
+        }
+
         $user = User::find($apiKeyRecord->user_id);
         Log::info('User found: ', ['user' => $user]);
 
@@ -144,6 +148,9 @@ class QuizController extends Controller
     {
         $apiKey = $request->header('X-API-Key');
         $user = $this->verify($apiKey);
+        if (!$user || !$user instanceof User) {
+            return response()->json(['message' => 'Invalid or unauthorized user'], Response::HTTP_UNAUTHORIZED);
+        }
 
         $quizzes = Quiz::where('user_id', $user->id)
         ->withCount('questions')
@@ -169,8 +176,8 @@ class QuizController extends Controller
             Log::info('Starting quiz creation', ['request' => $request->all()]);
 
             $validated = $request->validate([
-                'images' => 'required|array',
-                'images.*' => 'string',
+                'files' => 'required|array',
+                'file.*' => 'string',
                 'user_message' => 'required|string|max:1000',
                 'question_count' => 'required|integer|min:5|max:15',
                 'difficulty' => 'required|in:easy,medium,hard',
@@ -180,11 +187,15 @@ class QuizController extends Controller
 
             $apiKey = $request->header('X-API-Key');
             $user = $this->verify($apiKey);
+            if (!$user || !$user instanceof User) {
+                return response()->json(['message' => 'Invalid or unauthorized user'], Response::HTTP_UNAUTHORIZED);
+            }
+
 
 
             $extractedText = '';
-            forEach($validated['images'] as $image) {
-                $extractedText .= "\n" . $this->getContent($image)->getData()->text;
+            forEach($validated['files'] as $file) {
+                $extractedText .= "\n" . $this->getContent($file)->getData()->text;
 
             }
             Log::info('Extracted text from images', ['text' => $extractedText]);
@@ -340,10 +351,10 @@ class QuizController extends Controller
         }
     }
     
-    public function getContent($image): JsonResponse
+    public function getContent($file): JsonResponse
     {
 
-        $input = $image;
+        $input = $file;
         $tmpPrefix = tempnam(sys_get_temp_dir(), 'ocr_');
 
         try {
@@ -380,6 +391,39 @@ class QuizController extends Controller
                     throw new \Exception('Downloaded file is not a valid image, got: ' . $mime);
                 }
                 $ext = explode('/', $mime)[1] ?? 'png';
+
+            } elseif (preg_match('/^data:application\/pdf;base64,/', $input)) {
+                // Handle base64 encoded PDF
+                $base64Data = substr($input, strpos($input, ',') + 1);
+                $data = base64_decode($base64Data, true);
+                if ($data === false) {
+                    throw new \Exception('Invalid base64 encoding in PDF data');
+                }
+                $mime = finfo_buffer(finfo_open(FILEINFO_MIME_TYPE), $data);
+                if ($mime !== 'application/pdf') {
+                    throw new \Exception('Base64 data is not a valid PDF, got: ' . $mime);
+                }
+                $ext = 'pdf';
+
+                // Save PDF to temp file
+                $filePath = "{$tmpPrefix}.{$ext}";
+                if (file_put_contents($filePath, $data) === false) {
+                    throw new \Exception('Failed to write PDF data to temporary file');
+                }
+
+                // Parse PDF content
+                $parser = new \Smalot\PdfParser\Parser();
+                $pdf = $parser->parseFile($filePath);
+                $text = $pdf->getText();
+
+                if (trim($text) === '') {
+                    throw new \Exception('No text recognized in the PDF');
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'text' => trim($text),
+                ]);
 
             } else {
                 // Raw base64 string
@@ -440,6 +484,9 @@ class QuizController extends Controller
     {
         $apiKey = $request->header('X-API-Key');
         $user = $this->verify($apiKey);
+        if (!$user || !$user instanceof User) {
+            return response()->json(['message' => 'Invalid or unauthorized user'], Response::HTTP_UNAUTHORIZED);
+        }
 
         $quiz = Quiz::where('id', $id)
             ->where('user_id', $user->id)
@@ -465,9 +512,8 @@ class QuizController extends Controller
     {
         $apiKey = $request->header('X-API-Key');
         $user = $this->verify($apiKey);
-
-        if ($user->id !== $quiz->user_id) {
-            return response()->json(['message' => 'Unauthorized'], Response::HTTP_FORBIDDEN);
+        if (!$user || !$user instanceof User) {
+            return response()->json(['message' => 'Invalid or unauthorized user'], Response::HTTP_UNAUTHORIZED);
         }
 
         $validated = $request->validate([
@@ -489,6 +535,9 @@ class QuizController extends Controller
     {
         $apiKey = $request->header('X-API-Key');
         $user = $this->verify($apiKey);
+        if (!$user || !$user instanceof User) {
+            return response()->json(['message' => 'Invalid or unauthorized user'], Response::HTTP_UNAUTHORIZED);
+        }
 
         $quiz = Quiz::where('id', $id)->where('user_id', $user->id)->first();
 
