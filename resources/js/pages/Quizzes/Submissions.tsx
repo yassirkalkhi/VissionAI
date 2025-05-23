@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react';
+import { Head, Link } from '@inertiajs/react'; // Import Link for navigation
 import AppSidebarLayout from '@/layouts/app/app-sidebar-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatDistanceToNow } from 'date-fns';
@@ -6,6 +6,7 @@ import { XCircleIcon } from 'lucide-react';
 import { CheckCircleIcon } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { enUS, ar, fr,de , it ,zhCN } from 'date-fns/locale'; 
+import { Button } from '@/components/ui/button';
 
 
 interface QuizAttempt {
@@ -29,31 +30,31 @@ interface Props {
     conversations: any[];
 }
 
-export default function Submissions({ quiz, attempts, conversations }: Props) {
-    const { t ,language} = useLanguage();
+export default function Submissions({ quiz, attempts }: Props) {
+    const { t, language } = useLanguage();
     const getLocale = () => {
         switch (language) {
             case 'ar': return ar; // Arabic
             case 'fr': return fr; // French
-            case 'de': return de; // German (defaulting to English)
-            case 'it': return it; // Italian (defaulting to English)
-            case 'zh': return zhCN; // Chinese (defaulting to English)
+            case 'de': return de; // German
+            case 'it': return it; // Italian
+            case 'zh': return zhCN; // Chinese
             default: return enUS; // Default to English
         }
     };
-    
+
     const formatTime = (seconds: number) => {
         if (seconds < 60) {
             return `${seconds}s`;
         }
-        
+
         const minutes = Math.floor(seconds / 60);
         const remainingSeconds = seconds % 60;
-        
+
         if (minutes < 60) {
             return `${minutes}m ${remainingSeconds}s`;
         }
-        
+
         const hours = Math.floor(minutes / 60);
         const remainingMinutes = minutes % 60;
         return `${hours}h ${remainingMinutes}m ${remainingSeconds}s`;
@@ -68,30 +69,29 @@ export default function Submissions({ quiz, attempts, conversations }: Props) {
         });
         return correctCount;
     };
-    
+
     const handleScoreRender = (score: number) => {
-        if(score > 90){
+        if (score > 90) {
             return <span className="flex items-center gap-2 text-green-600">
                 <CheckCircleIcon className="w-5 h-5" />{score}%
-            </span>
+            </span>;
         }
-        if(score > 70){
+        if (score > 70) {
             return <span className="flex items-center gap-2 text-green-400">
                 <CheckCircleIcon className="w-5 h-5" />{score}%
-            </span>
+            </span>;
         }
-        if(score > 50){
+        if (score > 50) {
             return <span className="flex items-center gap-2 text-yellow-500">
-                <XCircleIcon className="w-5 h-5" />{score}% 
-            </span> 
+                <XCircleIcon className="w-5 h-5" />{score}%
+            </span>;
         }
-        if(score < 50){
+        if (score < 50) {
             return <span className="flex items-center gap-2 text-red-500">
                 <XCircleIcon className="w-5 h-5" />{score}%
-            </span>
+            </span>;
         }
-    }
-
+    };
 
     const breadcrumbs = [
         { title: "VisionAI", href: "/chat" },
@@ -100,7 +100,7 @@ export default function Submissions({ quiz, attempts, conversations }: Props) {
     ];
 
     return (
-        <AppSidebarLayout breadcrumbs={breadcrumbs} >
+        <AppSidebarLayout breadcrumbs={breadcrumbs}>
             <Head title={`${quiz.title} - ${t.submissions}`} />
 
             <div className="container mx-auto p-6">
@@ -140,6 +140,15 @@ export default function Submissions({ quiz, attempts, conversations }: Props) {
                                                     <span className="text-muted-foreground">{t.correctAnswers}:</span>
                                                     <span>{correctAnswers} / {quiz.questions.length}</span>
                                                 </div>
+                                                <div className="flex justify-end mt-4">
+
+                                                    <Link
+                                                        href={route('quizzes.overview', { quiz: quiz.id, overviewId: attempt.id })}
+                                                        className="text-blue-500 hover:underline"
+                                                    >
+                                                     <Button> {t.viewOverview}</Button>  
+                                                    </Link>
+                                                </div>
                                             </div>
                                         </CardContent>
                                     </Card>
@@ -151,4 +160,4 @@ export default function Submissions({ quiz, attempts, conversations }: Props) {
             </div>
         </AppSidebarLayout>
     );
-} 
+}

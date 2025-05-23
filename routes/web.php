@@ -15,16 +15,7 @@ Route::get('/', function () {
     return Inertia::render('welcome');
 })->name('home');
 
-// Route to serve storage files directly (outside auth middleware)
-Route::get('/storage/{path}', function ($path) {
-    // Check if file exists in public storage
-    $filePath = storage_path('app/public/' . $path);
-    if (file_exists($filePath)) {
-        $mimeType = File::mimeType($filePath);
-        return response()->file($filePath, ['Content-Type' => $mimeType]);
-    }
-    abort(404);
-})->where('path', '.*');
+
 
 Route::middleware([
     'auth',
@@ -56,8 +47,9 @@ Route::middleware([
     Route::get('/quizzes/{id}', [QuizzesController::class, 'show'])->name('quizzes.show');
     Route::put('/quizzes/{id}', [QuizzesController::class, 'update'])->name('quizzes.update');
     Route::delete('/quizzes/{id}', [QuizzesController::class, 'destroy'])->name('quizzes.destroy');
+    Route::get('/quizzes/{quiz}/overview/{overviewId}', [QuizzesController::class, 'overview'])->name('quizzes.overview');
 
-    // New route for saving partial responses from the chat
+    // route for saving partial responses from the chat
     Route::post('/api/save-partial-response', [ChatController::class, 'savePartialResponse'])->name('chat.save-partial-response');
 });
 

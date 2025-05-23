@@ -8,12 +8,7 @@ use Illuminate\Support\Facades\Log;
 
 class ImageUploadController extends Controller
 {
-    /**
-     * Handle the upload of images.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\JsonResponse
-     */
+    
     public function uploadImages(Request $request)
     {
         try {
@@ -29,7 +24,7 @@ class ImageUploadController extends Controller
                     
                     $appUrl = config('app.url');
                     
-                    // Check if port 8000 is already in the URL
+                    
                     if (strpos($appUrl, ':8000') === false) {
                         $appUrl = rtrim($appUrl, '/') . ':8000';
                     }

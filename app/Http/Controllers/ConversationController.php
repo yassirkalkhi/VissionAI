@@ -21,9 +21,7 @@ class ConversationController extends Controller
        }, $imagePaths);
    }
    
-    /**
-     * Display a listing of the resource.
-     */
+    
     public function index($id)
     {
         $conversation = Conversation::findOrFail($id);
@@ -62,9 +60,7 @@ class ConversationController extends Controller
     }
 
 
-    /**
-     * Create a new conversation
-     */
+        
     public function create(Request $request)
     {
         $validated = $request->validate([
@@ -74,11 +70,11 @@ class ConversationController extends Controller
 
         $title = '';
         if (!empty($request->message)) {
-            // Remove code blocks and trim
+            
             $cleanMessage = preg_replace('/```[\s\S]*?```/', '', $request->message);
             $cleanMessage = trim($cleanMessage);
             
-            //  first 50 characters
+            
             $firstLine = strtok($cleanMessage, "\n") ?: $cleanMessage;
             $title = strlen($firstLine) > 50 ? substr($firstLine, 0, 47) . '...' : $firstLine;
         }
@@ -92,13 +88,13 @@ class ConversationController extends Controller
             'title' => $title,
         ]);
 
-        // Process image attachments
+        
         $attachments = [];
         if ($request->has('images')) {
             $attachments = $this->processAttachments($request->images);
         }
 
-        // Create user message
+        
         $userMessage = Message::create([
             'conversation_id' => $conversation->id,
             'role' => 'user',
@@ -114,55 +110,39 @@ class ConversationController extends Controller
         ]);
     }
  
-    /**
-     * Store resource in storage.
-     */
+    
     public function store(Request $request)
     {
         //
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show(string $id)
     {
         //
     }
 
-    /**
-     * Show the form for editing the  resource.
-     */
+    
     public function edit(string $id)
     {
         //
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
+    
     public function update(Request $request, $id)
     {
-        // Log incoming data for debugging
-        \Log::info('Updating conversation', [
-            'id' => $id,
-            'request' => $request->all()
-        ]);
         
         $conversation = Conversation::findOrFail($id);
         
-        // Check ownership of conversation
         if ($conversation->user_id !== Auth::id()) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
         
-        // Validate request data
+        
         $validated = $request->validate([
             'title' => 'sometimes|string|max:255',
             'is_public' => 'sometimes|boolean',
         ]);
         
-        // Update conversation
         $conversation->update($validated);
         
         \Log::info('Conversation updated', [
@@ -176,12 +156,7 @@ class ConversationController extends Controller
         ]);
     }
 
-    /**
-     * Delete a conversation
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
+    
     public function destroy($id)
     {
         $conversation = Conversation::findOrFail($id);

@@ -112,6 +112,9 @@ export interface Translations {
     incorrect: string;
     explanation: string;
     question : string,
+    overview : string;
+    viewOverview : string;
+
     
     // Additional Quiz Properties needed for Create.tsx
     maxFilesAllowed: string;
@@ -310,6 +313,8 @@ export const translations: Record<Language, Translations> = {
         incorrect: 'Incorrect',
         explanation: 'Explanation',
         question: 'Question',
+        overview : 'Overview',
+        viewOverview : 'View Overview',
         
         // Additional Quiz Properties for Create.tsx
         maxFilesAllowed: 'Maximum 5 files allowed',
@@ -421,6 +426,7 @@ export const translations: Record<Language, Translations> = {
         pressCtrlEnterNewLine: 'اضغط Ctrl+Enter لسطر جديد',
         thinking: 'يفكر',
         processing: 'جاري المعالجة',
+    
         
         // File Upload
         uploadImage: 'رفع صورة',
@@ -506,6 +512,8 @@ export const translations: Record<Language, Translations> = {
         incorrect: 'خطأ',
         explanation: 'شرح',
         question: 'السؤال',
+        overview : 'نظرة عامة',
+        viewOverview : 'عرض النظرة العامة',
         
         // Additional Quiz Properties for Create.tsx
         maxFilesAllowed: 'الحد الأقصى 5 ملفات مسموحة',
@@ -702,6 +710,8 @@ export const translations: Record<Language, Translations> = {
         incorrect: 'Incorrect',
         explanation: 'Explication',
         question: 'Question',
+        overview : 'Aperçu',
+        viewOverview : 'Voir l\'aperçu',
         
         // Additional Quiz Properties for Create.tsx
         maxFilesAllowed: 'Maximum 5 fichiers autorisés',
@@ -898,6 +908,8 @@ export const translations: Record<Language, Translations> = {
         incorrect: 'Falsch',
         explanation: 'Erklärung',
         question: 'Frage',
+        overview : 'Übersicht',
+        viewOverview : 'Übersicht anzeigen',
         
         // Additional Quiz Properties for Create.tsx
         maxFilesAllowed: 'Maximum 5 Dateien erlaubt',
@@ -1094,6 +1106,8 @@ export const translations: Record<Language, Translations> = {
         incorrect: 'Errato',
         explanation: 'Spiegazione',
         question: 'Domanda',
+        overview : 'Panoramica',
+        viewOverview : 'Visualizza panoramica',
 
 
         
@@ -1292,6 +1306,8 @@ export const translations: Record<Language, Translations> = {
         incorrect: '错误',
         explanation: '解释',
         question: '问题',
+        overview : '概述',
+        viewOverview : '查看概述',
 
         
         // Additional Quiz Properties for Create.tsx

@@ -21,11 +21,9 @@ class AuthenticateWithApiKey
             return response()->json(['message' => 'API key is missing'], 401);
         }
         
-        // Find all API keys in the database
         $keys = ApiKey::all();
         $validKey = null;
         
-        // Check if the provided key matches any of the hashed keys
         foreach ($keys as $key) {
             if (Hash::check($apiKey, $key->key)) {
                 $validKey = $key;
@@ -37,10 +35,8 @@ class AuthenticateWithApiKey
             return response()->json(['message' => 'Invalid API key'], 401);
         }
         
-        // Update the last used timestamp
         $validKey->update(['last_used_at' => now()]);
         
-        // Set the authenticated user for this request
         $request->setUserResolver(function () use ($validKey) {
             return $validKey->user;
         });

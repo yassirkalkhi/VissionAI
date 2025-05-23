@@ -195,10 +195,10 @@ class QuizzesController extends Controller
                 'time_limit' => 'required|integer|min:0'
             ]);
 
-            // Process the formatted text
+            
             $extractedText = $request->extracted_text;
             
-            // Create initial quiz record
+            
             $quiz = Quiz::create([
                 'title' => 'New Quiz',
                 'description' => 'Generated from uploaded content',
@@ -213,7 +213,7 @@ class QuizzesController extends Controller
                 ]
             ]);
 
-            // System prompt
+            
             $systemMessage = "You are an expert quiz generator. Create a quiz with the following specifications:
                 - Ensure that the question and answer are logical and correct
                 - all questions Must have one logic valid answer
@@ -247,12 +247,12 @@ class QuizzesController extends Controller
                     }
                 }";
 
-            // Call DeepSeek API
+            
             $response = Http::timeout(90)->withHeaders([
-                'Authorization' => 'Bearer ' . env('DEEPSEEK_API_KEY'),
+                'Authorization' => 'Bearer ' . env('GROQ_API_KEY'),
                 'Content-Type' => 'application/json'
-            ])->post(env('DEEPSEEK_API_URL'), [
-                'model' => 'deepseek-chat',
+            ])->post(env('GROQ_BASE_URL'), [
+                'model' => env('AI_MODEL'),
                 'messages' => [
                     ['role' => 'system', 'content' => $systemMessage],
                     ['role' => 'user', 'content' => "Generate a quiz from this text:\n\n{$extractedText}"]
@@ -291,13 +291,13 @@ class QuizzesController extends Controller
 
                     $quizContent = $quizData['quiz'];
 
-                    // Validate quiz content
+                    
                     if (!isset($quizContent['questions']) || !is_array($quizContent['questions'])) {
                         Log::error('Invalid questions format', ['quizContent' => $quizContent]);
                         throw new \Exception('Invalid questions format');
                     }
 
-                    // Validate each question
+                    
                     foreach ($quizContent['questions'] as $index => $question) {
                         if (!isset($question['question_text']) || 
                             !isset($question['options']) || 
@@ -312,7 +312,7 @@ class QuizzesController extends Controller
                         }
                     }
 
-                    // Update quiz and create questions in a transaction
+                    
                     DB::transaction(function () use ($quiz, $quizContent) {
                         $quiz->update([
                             'title' => $quizContent['title'] ?? 'New Quiz',
@@ -325,14 +325,14 @@ class QuizzesController extends Controller
 
                         $questions = [];
                         foreach ($quizContent['questions'] as $index => $question) {
-                            // Ensure options is a valid JSON array
+                            
                             $options = is_array($question['options']) ? $question['options'] : [];
                             
                             $questions[] = [
                                 'quiz_id' => $quiz->id,
                                 'question_text' => $question['question_text'],
                                 'question_type' => 'multiple_choice',
-                                'options' => json_encode($options), // Convert array to JSON string
+                                'options' => json_encode($options), 
                                 'correct_answer' => $question['correct_answer'],
                                 'explanation' => $question['explanation'] ?? '',
                                 'order' => $index + 1,
@@ -468,14 +468,14 @@ class QuizzesController extends Controller
             $quiz = Quiz::with('questions')->findOrFail($id);
             Log::info('Quiz submission request data:', $request->all());
             
-            // Validate the request
+            
             $validated = $request->validate([
                 'answers' => 'required|array',
                 'time_taken' => 'required|integer|min:0',
                 'score' => 'required|numeric|min:0|max:100'
             ]);
 
-            // Validate that all questions have been answered
+            
             $questionIds = $quiz->questions->pluck('id')->toArray();
             $answeredQuestionIds = array_keys($validated['answers']);
             $missingQuestions = array_diff($questionIds, $answeredQuestionIds);
@@ -487,7 +487,7 @@ class QuizzesController extends Controller
                 ]);
             }
 
-            // Create quiz attempt
+            
             $attempt = QuizAttempt::create([
                 'quiz_id' => $quiz->id,
                 'user_id' => auth()->id(),
@@ -498,7 +498,7 @@ class QuizzesController extends Controller
 
             DB::commit();
 
-            // Log successful submission
+            
             Log::info('Quiz submission successful', [
                 'quiz_id' => $quiz->id,
                 'attempt_id' => $attempt->id,
@@ -558,4 +558,14 @@ class QuizzesController extends Controller
                 ->get(['id', 'title', 'updated_at'])
         ]);
     }
+    public function overview($quizId,$overviewId)
+{
+    $quiz = Quiz::with('questions')->findOrFail($quizId);
+    $attempt = $quiz->attempts()->where('id', $overviewId)->firstOrFail(); 
+
+    return inertia('Quizzes/Overview', [
+        'quiz' => $quiz,
+        'attempt' => $attempt,
+    ]);
+}
 } 

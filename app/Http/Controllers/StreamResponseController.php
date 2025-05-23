@@ -7,9 +7,9 @@ use App\Models\Conversation;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 
-class DeepSeekController extends Controller
+class StreamResponseController extends Controller
 {
-    public function callDeepseek(Request $request, callable $onChunk, callable $onComplete)
+    public function stream(Request $request, callable $onChunk, callable $onComplete)
     {
         set_time_limit(1000);
 
@@ -58,13 +58,13 @@ class DeepSeekController extends Controller
             }
         }
 
-        // Add the current user message
+        
         $messages[] = [
             'role' => 'user',
             'content' => $userMessage
         ];
 
-        // Add extracted text if present
+        
         if ($hasExtractedText) {
             $messages[] = [
                 'role' => 'user',
@@ -73,23 +73,23 @@ class DeepSeekController extends Controller
         }
 
         try {
-            // Make the API call
+            
             $response = Http::timeout(600)
                 ->withHeaders([
-                    'Authorization' => 'Bearer ' . env('DEEPSEEK_API_KEY'),
+                    'Authorization' => 'Bearer ' . env('GROQ_API_KEY'),
                     'Content-Type' => 'application/json',
                     'Accept' => 'text/event-stream'
                 ])
                 ->withOptions(['stream' => true])
-                ->post(env('DEEPSEEK_API_URL'), [
-                    'model' => 'deepseek-chat',
+                ->post(env('GROQ_BASE_URL'), [
+                    'model' => env('AI_MODEL'),
                     'messages' => $messages,
                     'temperature' => 0.7,
                     'max_tokens' => 2000,
                     'stream' => true,
                 ]);
 
-            // Check if the API call was successful
+            
             if (!$response->successful()) {
                 Log::error('API request failed', [
                     'status' => $response->status()
@@ -97,27 +97,27 @@ class DeepSeekController extends Controller
                 throw new \Exception('API request failed: ' . $response->status());
             }
 
-            // Get the response body
+            
             $body = $response->toPsrResponse()->getBody();
             $contentBuffer = '';
             $buffer = '';
 
-            // Process streaming response
+            
             while (!$body->eof()) {
                 try {
-                    // Read a chunk of data
+                    
                     $chunk = $body->read(1024);
                     if (empty($chunk)) {
                         continue;
                     }
                     $buffer .= $chunk;
 
-                    // Process complete events in the buffer
+                    
                     while (($pos = strpos($buffer, "\n\n")) !== false) {
                         $event = substr($buffer, 0, $pos);
                         $buffer = substr($buffer, $pos + 2);
 
-                        // Process data events
+                        
                         if (strpos($event, 'data: ') === 0) {
                             $jsonData = trim(substr($event, 6));
 
@@ -126,14 +126,14 @@ class DeepSeekController extends Controller
                             }
 
                             try {
-                                // Parse the JSON data
+                                
                                 $data = json_decode($jsonData, true);
                                 if (json_last_error() !== JSON_ERROR_NONE) {
                                     Log::warning('Invalid JSON in stream', ['data' => $jsonData]);
                                     continue;
                                 }
 
-                                // Handle content chunks
+                                
                                 if (isset($data['choices'][0]['delta']['content'])) {
                                     $contentChunk = $data['choices'][0]['delta']['content'];
                                     if (!empty($contentChunk)) {
@@ -156,7 +156,7 @@ class DeepSeekController extends Controller
                 }
             }
 
-            // Return the content
+            
             if (!empty($contentBuffer)) {
                 $onComplete($contentBuffer);
                 return $contentBuffer;

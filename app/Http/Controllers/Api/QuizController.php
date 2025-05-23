@@ -173,17 +173,18 @@ class QuizController extends Controller
         set_time_limit(1000);
         try {
             ini_set('max_execution_time', 240);
-            Log::info('Starting quiz creation', ['request' => $request->all()]);
-
+           
             $validated = $request->validate([
                 'files' => 'required|array',
-                'file.*' => 'string',
+                'files.*' => 'required|file|mimes:jpg,jpeg,png,pdf|max:2048',
                 'user_message' => 'required|string|max:1000',
                 'question_count' => 'required|integer|min:5|max:15',
                 'difficulty' => 'required|in:easy,medium,hard',
                 'enable_timer' => 'required|in:0,1',
                 'time_limit' => 'required|integer|min:0'
             ]);
+            Log::info('Starting quiz creation', ['request' => $validated['files']]);
+ 
 
             $apiKey = $request->header('X-API-Key');
             $user = $this->verify($apiKey);
@@ -192,12 +193,49 @@ class QuizController extends Controller
             }
 
 
-
+          
             $extractedText = '';
-            forEach($validated['files'] as $file) {
-                $extractedText .= "\n" . $this->getContent($file)->getData()->text;
+            try {
+                $multipart = [];
 
+                foreach ($validated['files'] as $index => $file) {
+                    if ($file->isValid()) {
+                        $multipart[] = [
+                            'name' => 'files', // use 'files[]' if the API expects an array
+                            'contents' => fopen($file->getRealPath(), 'r'),
+                            'filename' => $file->getClientOriginalName(),
+                        ];
+                    } else {
+                        Log::error('Invalid file uploaded', ['index' => $index]);
+                    }
+                }
+                
+                $response = Http::timeout(240)
+                    ->asMultipart()
+                    ->post(env('OCR_API_URL'), $multipart);
+                
+                Log::info('OCR API response', ['response' => $response->json()]);
+
+                $responseData = json_decode($response->body(), true);
+
+                if (isset($responseData['extracted_texts']) && is_array($responseData['extracted_texts'])) {
+                    foreach ($responseData['extracted_texts'] as $file) {
+                        $extractedText .= $file['text'] . "\n\n";
+                    }
+                } else {
+                    throw new \Exception('Invalid OCR API response format');
+                }
+
+                Log::info('Extracted text from OCR API', ['text' => $extractedText]);
+            } catch (\Exception $e) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to process files',
+                    'error' => $e->getMessage()
+                ], 422);
             }
+
+
             Log::info('Extracted text from images', ['text' => $extractedText]);
             
             $systemMessage = "You are an expert quiz generator. Create a quiz based on these instructions:
@@ -351,129 +389,34 @@ class QuizController extends Controller
         }
     }
     
-    public function getContent($file): JsonResponse
+
+    public function getContent($files): JsonResponse
     {
 
-        $input = $file;
-        $tmpPrefix = tempnam(sys_get_temp_dir(), 'ocr_');
+       $input = $files;
+       try{
+        $res = Http::post(env('OCR_API_URL'), [
+            'files' => $input,
+        ]);
+        return $res;
+       }catch(\Exception $e){
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to process image',
+            'error' => $e->getMessage()
+        ], 422);
+       }
+     
 
-        try {
-            // Determine source: data URI, URL, or raw base64
-            if (preg_match('/^data:image\/(\w+);base64,/', $input, $match)) {
-                // Strictly decode base64 data URI
-                $base64Data = substr($input, strpos($input, ',') + 1);
-                $data = base64_decode($base64Data, true);
-                if ($data === false) {
-                    throw new \Exception('Invalid base64 encoding in data URI');
-                }
-                $mime = finfo_buffer(finfo_open(FILEINFO_MIME_TYPE), $data);
-                if (strpos($mime, 'image/') !== 0) {
-                    throw new \Exception('Data URI did not contain valid image data, got: ' . $mime);
-                }
-                $ext = strtolower($match[1]);
-
-            } elseif (filter_var($input, FILTER_VALIDATE_URL)) {
-                // Fetch image from URL
-                $headers = @get_headers($input, 1);
-                $contentType = $headers['Content-Type'] ?? '';
-                if (is_array($contentType)) {
-                    $contentType = end($contentType);
-                }
-                if (strpos($contentType, 'image/') !== 0) {
-                    throw new \Exception('URL did not return an image, got Content-Type: ' . $contentType);
-                }
-                $data = @file_get_contents($input);
-                if ($data === false) {
-                    throw new \Exception('Failed to download image from URL');
-                }
-                $mime = finfo_buffer(finfo_open(FILEINFO_MIME_TYPE), $data);
-                if (strpos($mime, 'image/') !== 0) {
-                    throw new \Exception('Downloaded file is not a valid image, got: ' . $mime);
-                }
-                $ext = explode('/', $mime)[1] ?? 'png';
-
-            } elseif (preg_match('/^data:application\/pdf;base64,/', $input)) {
-                // Handle base64 encoded PDF
-                $base64Data = substr($input, strpos($input, ',') + 1);
-                $data = base64_decode($base64Data, true);
-                if ($data === false) {
-                    throw new \Exception('Invalid base64 encoding in PDF data');
-                }
-                $mime = finfo_buffer(finfo_open(FILEINFO_MIME_TYPE), $data);
-                if ($mime !== 'application/pdf') {
-                    throw new \Exception('Base64 data is not a valid PDF, got: ' . $mime);
-                }
-                $ext = 'pdf';
-
-                // Save PDF to temp file
-                $filePath = "{$tmpPrefix}.{$ext}";
-                if (file_put_contents($filePath, $data) === false) {
-                    throw new \Exception('Failed to write PDF data to temporary file');
-                }
-
-                // Parse PDF content
-                $parser = new \Smalot\PdfParser\Parser();
-                $pdf = $parser->parseFile($filePath);
-                $text = $pdf->getText();
-
-                if (trim($text) === '') {
-                    throw new \Exception('No text recognized in the PDF');
-                }
-
-                return response()->json([
-                    'success' => true,
-                    'text' => trim($text),
-                ]);
-
-            } else {
-                // Raw base64 string
-                $data = base64_decode($input, true);
-                if ($data === false) {
-                    throw new \Exception('Invalid base64 string');
-                }
-                $mime = finfo_buffer(finfo_open(FILEINFO_MIME_TYPE), $data);
-                if (strpos($mime, 'image/') !== 0) {
-                    throw new \Exception('Invalid base64 data: expected image but got ' . $mime);
-                }
-                $ext = explode('/', $mime)[1] ?? 'png';
-            }
-
-            // Save to temp file
-            $filePath = "{$tmpPrefix}.{$ext}";
-            if (file_put_contents($filePath, $data) === false) {
-                throw new \Exception('Failed to write image data to temporary file');
-            }
-
-            // Run OCR
-            $text = (new TesseractOCR($filePath))
-            ->executable('C:\\Program Files\\Tesseract-OCR\\tesseract.exe')
-            ->run();
-
-            if (trim($text) === '') {
-                throw new \Exception('No text recognized in the image');
-            }
-
-            return response()->json([
-                'success' => true,
-                'text' => trim($text),
-            ]);
-
-        } catch (\Throwable $e) {
-            // Return structured error message
+        if ($res->failed()) {
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage() ?: 'OCR processing failed',
+                'message' => 'Failed to process image',
+                'error' => $res->body()
             ], 422);
-
-        } finally {
-            // Cleanup files
-            if (isset($filePath) && file_exists($filePath)) {
-                unlink($filePath);
-            }
-            if (file_exists($tmpPrefix)) {
-                unlink($tmpPrefix);
-            }
         }
+
+        return response()->json($res->json(), 200);
     }
 
     

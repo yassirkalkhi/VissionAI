@@ -19,10 +19,5 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Http::macro('ollama', function () {
-            return Http::baseUrl('http://localhost:11434')
-                ->timeout(120)
-                ->retry(3, 1000);
-        });
     }
 }

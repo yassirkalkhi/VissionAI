@@ -16,10 +16,8 @@ class IncreaseTimeoutForChat
      */
     public function handle(Request $request, Closure $next)
     {
-        // Increase PHP execution time limit for chat routes
-        set_time_limit(1000); // 2 minutes
+        set_time_limit(1000); 
         
-        // Increase memory limit if needed
         ini_set('memory_limit', '256M');
         
         return $next($request);

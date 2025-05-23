@@ -10,19 +10,18 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use App\Http\Controllers\StreamResponseController;
 
 class ChatController extends Controller
 {
-    protected $deepSeekController;
+    protected $streamResponseController;
 
-    public function __construct(DeepSeekController $deepSeekController)
+    public function __construct(StreamResponseController $streamResponseController)
     {
-        $this->deepSeekController = $deepSeekController;
+        $this->streamResponseController = $streamResponseController;
     }
 
-    /**
-     * Display the chat interface
-     */
+    
     public function index(Request $request, $conversationId = null)
     {
         if ($conversationId) {
@@ -72,9 +71,6 @@ class ChatController extends Controller
 
 
     
-    /**
-     * Stream a response from the AI
-     */
     public function stream(Request $request)
     {
         return new StreamedResponse(function () use ($request) {
@@ -137,7 +133,7 @@ class ChatController extends Controller
                 };
                 
                 
-                $this->deepSeekController->callDeepseek($request, $onChunk, $onComplete);
+                $this->streamResponseController->stream($request, $onChunk, $onComplete);
                 
             } catch (\Exception $e) {
                 Log::error('Stream error: ' . $e->getMessage());
@@ -155,16 +151,14 @@ class ChatController extends Controller
         ]);
     }
 
-    /**
-     * Process image attachments
-     */
+    
     private function processAttachments(array $imagePaths): array
     {
         return array_map(function ($path) {
             $mimeType = Storage::mimeType($path) ?? 'image/jpeg';
             $appUrl = config('app.url');
             
-            // Check if port 8000 is already in the URL
+            
             if (strpos($appUrl, ':8000') === false) {
                 $appUrl = rtrim($appUrl, '/') . ':8000';
             }
@@ -176,13 +170,11 @@ class ChatController extends Controller
         }, $imagePaths);
     }
     
-    /**
-     * Save a partial response when generation is stopped by the user
-     */
+
     public function savePartialResponse(Request $request)
     {
         try {
-            // Validate the request
+            
             $validated = $request->validate([
                 'conversation_id' => 'required|integer',
                 'content' => 'required|string',
@@ -190,21 +182,21 @@ class ChatController extends Controller
                 'is_partial' => 'required|boolean'
             ]);
 
-            // Find the conversation and verify ownership
+            
             $conversation = Conversation::findOrFail($validated['conversation_id']);
             
             if ($conversation->user_id !== Auth::id()) {
                 return response()->json(['error' => 'Unauthorized'], 403);
             }
 
-            // Find the most recent assistant message that is streaming
+            
             $message = Message::where('conversation_id', $conversation->id)
                 ->where('role', 'assistant')
                 ->where('is_streaming', true)
                 ->latest()
                 ->first();
 
-            // If a streaming message is found, update it
+            
             if ($message) {
                 $message->update([
                     'content' => $validated['content'] . "\n\n[Generation stopped by user]",
@@ -216,7 +208,7 @@ class ChatController extends Controller
                     'message' => 'Partial response saved successfully'
                 ]);
             } else {
-                // Create a new message if no streaming message is found
+                
                 Message::create([
                     'conversation_id' => $conversation->id,
                     'role' => 'assistant',
@@ -238,14 +230,12 @@ class ChatController extends Controller
         }
     }
 
-    /**
-     * Display public conversation
-     */
+
     public function viewPublicConversation($conversationId)
     {
         $conversation = Conversation::findOrFail($conversationId);
         
-        // Check if conversation is public
+        
         if (!$conversation->is_public) {
             abort(403, 'This conversation is not public');
         }

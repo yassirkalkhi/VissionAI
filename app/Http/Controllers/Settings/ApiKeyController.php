@@ -13,9 +13,7 @@ use Inertia\Response;
 
 class ApiKeyController extends Controller
 {
-    /**
-     * Display the API keys management view.
-     */
+   
     public function index(Request $request): Response
     {
         return Inertia::render('settings/api', [
@@ -24,9 +22,7 @@ class ApiKeyController extends Controller
         ]);
     }
 
-    /**
-     * Store a newly created API key in storage.
-     */
+    
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
@@ -43,9 +39,7 @@ class ApiKeyController extends Controller
         return Redirect::route('api-keys.index')->with('newApiKey', $plainTextKey);
     }
 
-    /**
-     * Remove the specified API key from storage.
-     */
+    
     public function destroy(Request $request, ApiKey $apiKey): RedirectResponse
     {
         if ($request->user()->id !== $apiKey->user_id) {
